@@ -56,81 +56,61 @@ const copyPrompt = (promptText, el) => {
 // — see dashboard-visualizer/README.md for the one-time symlink setup that
 // keeps this file live without manual re-copying.
 //
-// TINY/BIG MODE (2026-07-31): the card defaults to a compact "tiny" view
-// (title + counts + a needs-Ian dot) and expands to the full "big" view
-// (resets, needs-Ian detail, most-recent, sections, Needs Attention) on
-// hover/interaction (see `card`'s own `&.is-expanded .expand` rule).
+// TINY/BIG MODE (2026-07-31, trigger mechanism replaced 2026-08-04): the
+// card defaults to a compact "tiny" view (title + counts + a needs-Ian dot)
+// and expands to the full "big" view (resets, needs-Ian detail,
+// most-recent, sections, Needs Attention) via a click on the title (see
+// `card`'s own `&.is-expanded .expand` rule).
 //
-// Three passes at this, each one because the last still collapsed
-// unexpectedly: (1) pure CSS `:hover` - flaky around scroll/reflow in the
-// WebView, collapsed near the bottom of a long list even though the pointer
-// never left the card. (2) `onMouseEnter`/`onMouseLeave` toggling a literal
-// `is-expanded` class - real DOM boundary events instead of a re-derived
-// pseudo-class, but Ian still hit it: moving from the bottom of one
-// section toward another triggered an immediate collapse mid-transit (that
-// specific case got its own fix - see `nestedList`'s exit-delay comment -
-// but the card-level collapse-near-boundary symptom persisted too).
+// History, kept for context: this went through three hover-based attempts,
+// each one because the last still collapsed unexpectedly - (1) pure CSS
+// `:hover`, flaky around scroll/reflow in the WebView; (2)
+// `onMouseEnter`/`onMouseLeave` toggling a literal `is-expanded` class,
+// still collapsed mid-transit moving between sections; (3) a 12-second
+// collapse-grace-period timer, which fixed the boundary issues but
+// introduced a NEW bug - hovering the title itself for long enough to
+// cross a refresh tick could revert to mini with no mouse movement at all
+// (see `cardExpanded`'s own comment below for that root cause). Rather
+// than a fourth hover-timing patch, Ian's own pick replaced the whole
+// mechanism: "clicking it [the title] toggles mini/big mode... title
+// becomes the single on/off control for the whole card." No timers, no
+// grace windows, no ambiguity about whether the pointer "really" left -
+// see `toggleExpanded` below. The expanded view itself still scrolls (one
+// scroll region, see card's `&.is-expanded .expand` rule) rather than
+// being height-unbounded, since full unfiltered section lists (25 idea
+// items, etc.) can run long.
+// Module-level flag (2026-08-04). Tracks expanded/collapsed state in a
+// plain module-level variable rather than relying solely on the DOM node's
+// own classList - survives node replacement since it's just JS, not a DOM
+// property. render() below bakes it directly into the className on every
+// single render pass, so any freshly-created node (e.g. after an Übersicht
+// refresh reshapes the tree - several siblings render conditionally, like
+// `daily_goal &&`) is correctly classed from birth.
 //
-// (3) Grace-period timer, per Ian's own suggested fix: "instead of
-// boundary, it can stay big mode while selected and then go back to mini
-// if mouse is outside big mode boundary after 10-15 sec." Decouples
-// "collapse" from "did the pointer technically leave" entirely - mouseleave
-// now just ARMS a `COLLAPSE_GRACE_MS` timer (stashed directly on the DOM
-// node as `el._collapseTimer`, not React state - the node persists across
-// Übersicht's periodic re-renders, same reasoning as every other imperative
-// classList trick in this file) instead of collapsing immediately.
-// mouseenter cancels any pending timer. Any real interaction inside that
-// window - even a brief, spurious mouseleave/mouseenter blip from whatever
-// WebView quirk was causing the earlier symptoms - gets absorbed by the
-// grace period instead of visibly collapsing the card. If the pointer
-// genuinely stays away the whole window, it settles back to mini on its
-// own, same as before, just on a timer instead of an instant boundary
-// check. The expanded view itself scrolls (one scroll region, see card's
-// `&.is-expanded .expand` rule) rather than being height-unbounded, since
-// full unfiltered section lists (25 idea items, etc.) can run long. True
-// click-to-expand (an explicit click that stays expanded, independent of
-// hover) is still a separate, not-yet-built feature — see
-// dashboard-visualizer/README.md's Accessibility-permission note.
-const COLLAPSE_GRACE_MS = 12000
-
-// Module-level flag (2026-08-04), per Ian: "if I hover on Commandspace the
-// title for a few seconds it will revert to mini mode." Root cause: the
-// "is-expanded" class lived ONLY as an imperative classList mutation on the
-// live DOM node - correct at the instant it's set, but Übersicht re-runs
-// render(state) on every refreshFrequency tick (20s) independent of hover,
-// and if that produces a fresh DOM node for the card (a real possibility
-// whenever the returned tree's shape shifts - several siblings render
-// conditionally, e.g. `daily_goal &&`/`most_recent_project &&`), the new
-// node is born with none of the old node's classList history. The mouse
-// hasn't moved, so no fresh mouseenter fires to re-apply "is-expanded" -
-// browsers only dispatch enter/leave on real pointer movement crossing a
-// boundary, not on DOM nodes appearing under an already-stationary cursor.
-// Sitting still over the title (a natural resting spot) for long enough to
-// cross a refresh tick was exactly the case that exposed this.
-// Fix: track expanded/collapsed state in a plain module-level variable
-// instead of relying solely on the DOM node's own classList. This survives
-// node replacement since it's just JS, not a DOM property - render() below
-// bakes it directly into the className on every single render pass, so any
-// freshly-created node is correctly classed from birth regardless of
-// whether a new mouseenter ever fires on it.
+// Trigger mechanism replaced entirely (2026-08-04), per Ian's own explicit
+// pick: "clicking it" toggles mini/big mode - "title becomes the single
+// on/off control for the whole card." This replaces THREE prior rounds of
+// hover-based mechanisms (pure CSS :hover, then mouseenter/mouseleave with
+// a 12s collapse-grace-timer, each one built after the last still
+// mis-collapsed on Ian in some edge case - boundary flicker, mid-scroll
+// collapse, and finally the title-hover revert bug fixed earlier this same
+// round). A plain click toggle sidesteps that whole class of bug - no
+// timers, no grace windows, no ambiguity about whether the pointer
+// "really" left the card. Whole-card hover-to-expand is gone; the title is
+// now the only way in or out of big mode.
 let cardExpanded = false
 
-const armCollapse = (el) => {
-  if (el._collapseTimer) clearTimeout(el._collapseTimer)
-  el._collapseTimer = setTimeout(() => {
-    el.classList.remove("is-expanded")
-    cardExpanded = false
-    el._collapseTimer = null
-  }, COLLAPSE_GRACE_MS)
-}
-
-const disarmCollapse = (el) => {
-  if (el._collapseTimer) {
-    clearTimeout(el._collapseTimer)
-    el._collapseTimer = null
-  }
-  el.classList.add("is-expanded")
-  cardExpanded = true
+const toggleExpanded = (e) => {
+  e.stopPropagation()
+  cardExpanded = !cardExpanded
+  // Instant visual feedback on the actual DOM node - title is always
+  // render()'s first direct child inside the card root, so parentElement
+  // is reliably the card itself. Not strictly required for correctness
+  // (render() also bakes cardExpanded into className on the next poll -
+  // see card's own className below) but avoids waiting up to
+  // refreshFrequency (20s) for a click to visibly do anything.
+  const cardEl = e.currentTarget.parentElement
+  if (cardEl) cardEl.classList.toggle("is-expanded", cardExpanded)
 }
 
 export const command =
@@ -1911,12 +1891,8 @@ export const render = (state) => {
   const hasResets = (usage_resets && usage_resets.length > 0) || session_reset || personal_health
 
   return (
-    <div
-      className={card}
-      onMouseEnter={(e) => disarmCollapse(e.currentTarget)}
-      onMouseLeave={(e) => armCollapse(e.currentTarget)}
-    >
-      <div className={title}>Commandspace</div>
+    <div className={cardExpanded ? `${card} is-expanded` : card}>
+      <div className={`${title} ${clickableCursor}`} onClick={toggleExpanded}>Commandspace</div>
 
       {/* 2026-07-31, per Ian: mini mode was inconsistent - Done showed "0"
           unconditionally while Dormant/Needs Attention only appeared above 0,
