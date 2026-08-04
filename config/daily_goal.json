@@ -1,7 +1,20 @@
 {
   "date": "2026-08-04",
   "time_budget_minutes": 40,
-  "goal_text": "Decide `mentor-mode`'s explain-vs-just-do-it line, and `privacy-security`'s scope call (personal habit vs. real tool).",
+  "goals": [
+    {
+      "title": "Decide `mentor-mode`'s explain-vs-just-do-it line",
+      "detail": "A quick judgment call, not a build.",
+      "current_section": "Needs Attention",
+      "context": "mentor-mode's own project flags this as its central open question - when Claude should actively teach vs. just execute."
+    },
+    {
+      "title": "Decide `privacy-security`'s scope call",
+      "detail": "Personal-discipline habit vs. a real recurring tool.",
+      "current_section": "Backlog",
+      "context": "Feeds daily-pull's tips and the katamari collection once it's scoped for real."
+    }
+  ],
   "target_count": 2,
   "baseline": {"needs_ian_count": 24, "idea_total": 23, "done_recent": 4}
 }

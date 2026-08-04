@@ -93,10 +93,33 @@ const copyPrompt = (promptText, el) => {
 // dashboard-visualizer/README.md's Accessibility-permission note.
 const COLLAPSE_GRACE_MS = 12000
 
+// Module-level flag (2026-08-04), per Ian: "if I hover on Commandspace the
+// title for a few seconds it will revert to mini mode." Root cause: the
+// "is-expanded" class lived ONLY as an imperative classList mutation on the
+// live DOM node - correct at the instant it's set, but Übersicht re-runs
+// render(state) on every refreshFrequency tick (20s) independent of hover,
+// and if that produces a fresh DOM node for the card (a real possibility
+// whenever the returned tree's shape shifts - several siblings render
+// conditionally, e.g. `daily_goal &&`/`most_recent_project &&`), the new
+// node is born with none of the old node's classList history. The mouse
+// hasn't moved, so no fresh mouseenter fires to re-apply "is-expanded" -
+// browsers only dispatch enter/leave on real pointer movement crossing a
+// boundary, not on DOM nodes appearing under an already-stationary cursor.
+// Sitting still over the title (a natural resting spot) for long enough to
+// cross a refresh tick was exactly the case that exposed this.
+// Fix: track expanded/collapsed state in a plain module-level variable
+// instead of relying solely on the DOM node's own classList. This survives
+// node replacement since it's just JS, not a DOM property - render() below
+// bakes it directly into the className on every single render pass, so any
+// freshly-created node is correctly classed from birth regardless of
+// whether a new mouseenter ever fires on it.
+let cardExpanded = false
+
 const armCollapse = (el) => {
   if (el._collapseTimer) clearTimeout(el._collapseTimer)
   el._collapseTimer = setTimeout(() => {
     el.classList.remove("is-expanded")
+    cardExpanded = false
     el._collapseTimer = null
   }, COLLAPSE_GRACE_MS)
 }
@@ -107,6 +130,7 @@ const disarmCollapse = (el) => {
     el._collapseTimer = null
   }
   el.classList.add("is-expanded")
+  cardExpanded = true
 }
 
 export const command =
@@ -242,6 +266,26 @@ const IconGoalDone = ({ size = 12 }) => (
   </svg>
 )
 
+// IconGoal (2026-08-04) - simple concentric target glyph for the new "Daily
+// Goals" section header, matching every other section's own small icon
+// (Active's ring, Idea's spark, etc.) now that the goal panel is a real
+// collapsible Section instead of a one-off styled block. See DailyGoals'
+// own comment near the Section component for the full restyle context.
+// Simplified (2026-08-04), per Ian: "the mini goal bullets are a nice
+// touche but theyre too big they should be smaller and try to have it
+// match similar style standard." The original 3-concentric-circle target
+// had noticeably more visual ink than every other single-ring icon in this
+// file (IconActive, IconDormant, etc.) even at the same pixel size - that
+// extra weight was what actually read as "too big," not the literal size
+// prop. Now a plain ring + center dot, matching IconActive's own shape and
+// weight exactly (just orange instead of green).
+const IconGoal = ({ size = 12 }) => (
+  <svg width={size} height={size} viewBox="0 0 12 12" style={iconStyle}>
+    <circle cx="6" cy="6" r="4.6" stroke={NERV_ORANGE} strokeWidth="1.2" fill="none" />
+    <circle cx="6" cy="6" r="1.6" fill={NERV_ORANGE} />
+  </svg>
+)
+
 const IconWarning = ({ size = 12 }) => (
   <svg width={size} height={size} viewBox="0 0 12 12" style={iconStyle}>
     <path d="M6 1.3L11 10.4H1Z" stroke={NERV_ORANGE} strokeWidth="1.1" strokeLinejoin="round" fill="none" />
@@ -342,6 +386,27 @@ const IconBin = ({ size = 12 }) => (
 // optional, defaults to the static amber used in big mode's gauge label so
 // that call site is unaffected; the new mini-mode pill below passes the
 // same HSL hue the gauge itself uses, computed from remainingFraction.
+// IconSession / IconUsage (2026-08-04), per Ian: "if there are icons we can
+// use for session and weekly usage that would be nice so that break session
+// and usage can all be aligned." Only Last Break had an icon before this -
+// these two match its size/muted-dim treatment so all three gauges read as
+// one consistent set instead of Last Break looking like a one-off.
+const IconSession = ({ size = 12 }) => (
+  <svg width={size} height={size} viewBox="0 0 12 12" style={iconStyle}>
+    <circle cx="6" cy="6.7" r="4.1" stroke={NERV_TEXT_DIM} strokeWidth="1.1" fill="none" />
+    <path d="M6 6.7V4.3" stroke={NERV_TEXT_DIM} strokeWidth="1.1" strokeLinecap="round" />
+    <path d="M4.6 1.3H7.4" stroke={NERV_TEXT_DIM} strokeWidth="1.1" strokeLinecap="round" />
+  </svg>
+)
+
+const IconUsage = ({ size = 12 }) => (
+  <svg width={size} height={size} viewBox="0 0 12 12" style={iconStyle}>
+    <rect x="1.3" y="6.5" width="2" height="4" fill={NERV_TEXT_DIM} />
+    <rect x="5" y="3.5" width="2" height="7" fill={NERV_TEXT_DIM} />
+    <rect x="8.7" y="1.3" width="2" height="9.2" fill={NERV_TEXT_DIM} />
+  </svg>
+)
+
 const IconHeartbeat = ({ size = 12, color = NERV_AMBER }) => (
   <svg width={size} height={size} viewBox="0 0 12 12" style={iconStyle}>
     <path
@@ -591,46 +656,33 @@ const title = css`
   }
 `
 
-// Daily goal panel (2026-08-04), per Ian: "implement like a goal for day...
-// a way to customize and set and suggest a very easy goal for the day."
-// This panel is purely a DISPLAY - the actual goal text and target come
-// from config/daily_goal.json, written by the goal-for-day skill (see that
+// Daily Goals section (2026-08-04) - restyled from a single bold-orange
+// line into a proper collapsible Section, per Ian: "can the goal for the
+// day be a list as well and have daily goals as a header. I want it to
+// look nicer and be more readable. also daily goals should be another
+// thing that is collapsable/expandable. most new implementations to
+// command space should follow this pattern generally." This is now the
+// reference shape for adding anything new here, not just the goal panel's
+// own fix - see the DailyGoals component itself (near Section, below) for
+// how it reuses sectionHeader/collapsibleSection/nestedList rather than a
+// bespoke one-off block.
+// Still purely a DISPLAY - the actual goal list and target come from
+// config/daily_goal.json, written by the goal-for-day skill (see that
 // project's SKILL.md), never generated here (same free/deferred split as
-// everything else in this file - deciding today's actual goal is real
-// judgment over full tracker context).
-// Pared down same day, per Ian's direct follow-up: an earlier pass also
-// bolded/oranged the Last Touched row below and added a dim caption +
-// meta line here - he clarified he only wanted "orange bold text only for
-// the goal... so it doesn't also have the gray text," and Last Touched
-// should stay exactly as it was before. Reverted Last Touched (see recent's
-// own comment below) and simplified this panel to a single bold-orange
-// line, nothing else - no caption above it, no dim progress/budget line
-// below it.
-const goalPanel = css`
-  margin-top: 8px;
-  padding: 8px 10px;
-  border: 1px solid ${NERV_LINE};
-  background: rgba(255, 107, 26, 0.06);
-  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
-`
-
-const goalText = css`
-  font-size: 12px;
-  font-weight: 700;
-  color: ${NERV_ORANGE};
-  line-height: 1.4;
-`
-
-// "Crossed off" (2026-08-04), per Ian: "maybe the goal can be crossed off
-// once it's achieved." Plain line-through + dimmed color once
-// daily_goal.completed flips true (see status_summary.py's load_daily_goal
-// completion proxy) - IconGoalDone prepends the text at the same moment,
-// "a little success... icon takes its place."
-const goalTextDone = css`
-  font-size: 12px;
-  font-weight: 700;
+// everything else in this file).
+//
+// Bold-orange text walked back the same day, per Ian's direct follow-up:
+// "scratch what i said about the orange have it match the style of the
+// other collapseabile sections and have brief summary that can be
+// explandable and have it clickable so that i can work on it in a new
+// thread." Individual goal rows now reuse `attentionRow` as-is (see
+// GoalRow, near AttentionEntryRow below) instead of a bespoke bold-orange
+// line - same plain dim text + click-to-expand-detail + click-to-copy-a-
+// working-prompt shape every other row in this file already has, just
+// with an orange hover tint instead of Needs Attention's red. No
+// goalItem/goalItemDone CSS needed anymore as a result.
+const goalItemDone = css`
   color: ${NERV_TEXT_DIM};
-  line-height: 1.4;
   text-decoration: line-through;
 `
 
@@ -704,6 +756,22 @@ const resetItemLabel = css`
   color: ${NERV_TEXT_DIM};
 `
 
+// Fixed icon slot (2026-08-04), per Ian: "i dont like that the icon
+// displaces last break in" - back when only Last Break carried an icon,
+// its label text started further right than Session/Weekly Usage's own
+// text (which began flush at the row's left edge with no icon before it).
+// Now that all three gauges get an icon (see IconSession/IconUsage above),
+// this reserves a fixed-width slot for it regardless of whether a given
+// row happens to pass one, so every label's TEXT starts at the exact same
+// x position - alignment no longer depends on icon presence.
+const resetItemIconSlot = css`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  flex-shrink: 0;
+`
+
 const resetBarCol = css`
   display: flex;
   flex-direction: column;
@@ -735,6 +803,19 @@ const sectionsWrap = css`
 // (label span gets a "[ " ::before, count span gets a " ]" ::after) - back to
 // exactly 2 flex items, so space-between always pins the label flush left and
 // the count flush right regardless of text length.
+// Spacing fix (2026-08-04), per Ian: "spacing on bin and dormant doesnt
+// look equal to all the others." Root cause: this used MARGIN, which
+// collapses between adjacent sibling block boxes - two zero-item sections
+// back to back (Dormant, Bin - neither renders a list underneath) had
+// nothing but empty wrapper divs between their headers, so their margins
+// collapsed into a single, smaller gap (max of the two, not the sum).
+// Sections with real content between them (or just one empty neighbor)
+// never hit this because the intervening element broke the collapse chain -
+// hence some gaps looking "normal" and only Dormant->Bin looking tight.
+// Padding never collapses, so switching to it makes every section's own
+// reserved space fully self-contained and identical regardless of what's
+// next to it - deterministic 8px-above/4px-below spacing everywhere, not
+// dependent on sibling emptiness.
 const sectionHeader = css`
   position: relative;
   display: flex;
@@ -743,7 +824,7 @@ const sectionHeader = css`
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: ${NERV_ORANGE};
-  margin: 8px 0 4px 0;
+  padding: 8px 0 4px 0;
 `
 
 const sectionHeaderLabel = css`
@@ -1393,7 +1474,10 @@ const ResetGauge = ({ label, valueText, remainingFraction, stale, staleText, onC
       className={onClick ? `${resetItem} ${clickableCursor} ${hoverTint(NERV_ORANGE)}` : resetItem}
       onClick={onClick}
     >
-      <span className={resetItemLabel}>{icon}{label}</span>
+      <span className={resetItemLabel}>
+        <span className={resetItemIconSlot}>{icon}</span>
+        {label}
+      </span>
       <div className={resetBarCol}>
         <div className={resetGaugeTrack}>
           <div className={resetGaugeFill} style={{ width: `${remainingPct}%`, ...gaugeVars }} />
@@ -1585,6 +1669,43 @@ const Section = ({ statusKey, section, collapsible, recentCount }) => {
   )
 }
 
+// DailyGoals (2026-08-04) - the goal-for-day panel restyled from a single
+// bold-orange line into a real Section, per Ian: "can the goal for the day
+// be a list as well and have daily goals as a header... more readable...
+// also daily goals should be another thing that is collapsable/expandable.
+// most new implementations to command space should follow this pattern
+// generally." Deliberately reuses Section's own building blocks
+// (sectionHeader/sectionHeaderLabel/sectionHeaderCount for the header,
+// collapsibleSection/nestedList/nestedInner/scrollList for the hover-reveal
+// list) rather than introducing a second visual language - this is now the
+// go-to shape for anything new added to Commandspace, not a one-off.
+// Row-level treatment revised same day, per Ian's direct follow-up: "have
+// it match the style of the other collapseabile sections and have brief
+// summary that can be explandable and have it clickable so that i can
+// work on it in a new thread" - see GoalRow (near AttentionEntryRow below)
+// for the individual-item shape this now uses instead of a plain styled
+// div.
+const DailyGoals = ({ dailyGoal }) => {
+  const goals = dailyGoal && dailyGoal.goals ? dailyGoal.goals : []
+  if (!dailyGoal || goals.length === 0) return null
+
+  return (
+    <div className={collapsibleSection}>
+      <div className={sectionHeader}>
+        <span className={sectionHeaderLabel}><IconGoal /> Daily Goals</span>
+        <span className={sectionHeaderCount}>{goals.length}</span>
+      </div>
+      <div className={`nested ${nestedList}`}>
+        <div className={`${nestedInner} ${scrollList}`}>
+          {goals.map((g, i) => (
+            <GoalRow key={i} goal={g} completed={dailyGoal.completed} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // 2026-07-31: this section's header now carries the count itself
 // (needsIanCount, the real uncapped total) - there used to be a SEPARATE
 // "N waiting on you" line elsewhere in big mode pulling from the exact same
@@ -1626,6 +1747,74 @@ const AttentionEntryRow = ({ entry, indent }) => (
     )}
   </div>
 )
+
+// GoalRow (2026-08-04) - individual Daily Goals item, per Ian's direct
+// follow-up on the section restyle above: "have it match the style of the
+// other collapseabile sections and have brief summary that can be
+// explandable and have it clickable so that i can work on it in a new
+// thread." Deliberately just AttentionEntryRow's exact shape (title row +
+// click-to-copy-a-working-prompt + expandable `detail`), orange hover tint
+// instead of Needs Attention's red so it still reads as its own category,
+// not a re-skin.
+//
+// Detail panel upgraded same day to real SubFields, per Ian's further
+// follow-up: "maybe sub sections can be summary, an explandable read out
+// of what section it currently lives in and maybe the previous context
+// piece or whatever." Same SubField component ProjectRow already uses for
+// Summary/Last completed/Next steps/Time estimate - each of these three is
+// independently hover-expandable, not one flat block of text. All three
+// fields (`detail`/`current_section`/`context`) are optional (see
+// status_summary.py's load_daily_goal normalization) - a goal with none of
+// them still renders fine with no detail panel at all, same as a
+// ProjectRow item with no summary.
+const goalPrompt = (title, detail) =>
+  `Help work on today's Commandspace goal: ${title}.` +
+  (detail ? ` ${detail}` : "") +
+  ` Before starting: read PROCESS.md and PHILOSOPHY.md in this folder for the ` +
+  `tracker's conventions.`
+
+const GoalRow = ({ goal, completed }) => {
+  const hasDetail = goal.detail || goal.current_section || goal.context
+  return (
+    <div
+      className={
+        completed
+          ? `${attentionRow} ${clickableCursor} ${hoverTint(NERV_ORANGE)} ${goalItemDone}`
+          : `${attentionRow} ${clickableCursor} ${hoverTint(NERV_ORANGE)}`
+      }
+      onClick={(e) => {
+        e.stopPropagation()
+        copyPrompt(goalPrompt(goal.title, goal.detail), e.currentTarget)
+      }}
+    >
+      <div className={attentionRowTop}>
+        <span className={attentionKind}>{completed ? <IconGoalDone /> : <IconGoal />}</span>
+        <span>{goal.title}</span>
+      </div>
+      {hasDetail && (
+        <div className={`detail ${detail}`} style={{ borderLeftColor: NERV_ORANGE }}>
+          <div className={detailInner}>
+            {goal.detail && (
+              <SubField label="Summary">
+                <div className={detailSummary}>{goal.detail}</div>
+              </SubField>
+            )}
+            {goal.current_section && (
+              <SubField label="Currently in">
+                <div>{goal.current_section}</div>
+              </SubField>
+            )}
+            {goal.context && (
+              <SubField label="Context">
+                <div>{goal.context}</div>
+              </SubField>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // GroupRow (2026-07-31) - see groupCount's own comment above for the design.
 const GroupRow = ({ project, items }) => {
@@ -1844,7 +2033,21 @@ export const render = (state) => {
                   stale={personal_health.overdue}
                   staleText="reset"
                   onClick={personal_health.overdue ? resetHealthTimer : undefined}
-                  icon={personal_health.away ? <IconSleep /> : <IconHeartbeat />}
+                  // Color fix (2026-08-04), per Ian: "the lifelines here for
+                  // break in mini mode and last break need to align." This
+                  // icon used to render at its default static amber
+                  // regardless of urgency, while the mini-mode pill right
+                  // above it colors the same heartbeat via healthHueColor's
+                  // green->red sweep - same glyph, two different colors, so
+                  // they never visually matched. Passing the same helper
+                  // here keeps them identical always.
+                  icon={
+                    personal_health.away ? (
+                      <IconSleep />
+                    ) : (
+                      <IconHeartbeat color={healthHueColor(personal_health)} />
+                    )
+                  }
                 />
               )}
               {session_reset && (
@@ -1853,6 +2056,7 @@ export const render = (state) => {
                   valueText={formatSessionReset(session_reset)}
                   remainingFraction={1 - session_reset.elapsed_fraction}
                   stale={session_reset.already_passed}
+                  icon={<IconSession />}
                 />
               )}
               {usage_resets &&
@@ -1862,16 +2066,9 @@ export const render = (state) => {
                     label={reset.label}
                     valueText={formatResetCountdown(reset.days_left, reset.hours_left)}
                     remainingFraction={1 - (reset.elapsed_fraction ?? 0)}
+                    icon={<IconUsage />}
                   />
                 ))}
-            </div>
-          )}
-
-          {daily_goal && (
-            <div className={goalPanel}>
-              <div className={daily_goal.completed ? goalTextDone : goalText}>
-                {daily_goal.completed && <IconGoalDone />} {daily_goal.goal_text}
-              </div>
             </div>
           )}
 
@@ -1882,6 +2079,7 @@ export const render = (state) => {
           )}
 
           <div className={sectionsWrap}>
+            <DailyGoals dailyGoal={daily_goal} />
             <Section statusKey="active" section={sections && sections.active} collapsible />
             <Section statusKey="idea" section={sections && sections.idea} collapsible />
             <Section statusKey="paused" section={sections && sections.paused} collapsible />

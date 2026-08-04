@@ -916,15 +916,58 @@ def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int) -> di
     (it can't know if the SPECIFIC items the goal named got done, only that
     SOME equivalent amount of real tracker movement happened since) -
     flagged here the same way every other honest-proxy signal in this file
-    is (away-detection, session-reset auto-roll, etc.)."""
+    is (away-detection, session-reset auto-roll, etc.).
+
+    Schema change (2026-08-04), per Ian: "can the goal for the day be a list
+    as well... more readable." `goal_text` (single string) is replaced by
+    `goals` (a list of strings) - the widget now renders this as a proper
+    collapsible "Daily Goals" section (header + list) instead of one
+    cramped line. Completion is still tracked in aggregate only (the proxy
+    above can't tell which SPECIFIC item moved, only that some equivalent
+    amount of tracker movement happened) - when `completed` flips true, the
+    widget marks every item in the list done together, not individually.
+
+    Schema change again, same day, per Ian's direct follow-up: "have it
+    match the style of the other collapsible sections and have brief
+    summary that can be explandable and have it clickable so that i can
+    work on it in a new thread." Each entry in `goals` is now an object -
+    `{"title": "...", "detail": "..."}` - instead of a plain string, so the
+    widget can give each item the same title+expandable-detail+
+    click-to-copy-a-working-prompt treatment every other row in this file
+    already has (ProjectRow, AttentionEntryRow). `detail` is optional; a
+    plain string is still accepted per-item for backward compatibility
+    (normalized to `{"title": item, "detail": None, ...}` below) so an
+    older goals list written before this change doesn't just silently
+    vanish.
+
+    Two more optional fields added the same day, per Ian's further
+    follow-up: "maybe sub sections can be summary, an explandable read out
+    of what section it currently lives in and maybe the previous context
+    piece or whatever." `current_section` (which tracker section/status the
+    referenced item lives in right now - "Needs Attention," "Backlog,"
+    etc.) and `context` (why it matters / prior related info) - both
+    rendered as their own independently-expandable SubField in the widget,
+    same shape ProjectRow already uses for Summary/Next steps/etc."""
     if not config_path.exists():
         return None
     try:
         data = json.loads(config_path.read_text(errors="ignore"))
     except (json.JSONDecodeError, OSError):
         return None
-    if not data or "date" not in data or "goal_text" not in data:
+    if not data or "date" not in data or "goals" not in data or not data["goals"]:
         return None
+
+    goals = [
+        {"title": g, "detail": None, "current_section": None, "context": None}
+        if isinstance(g, str)
+        else {
+            "title": g.get("title", ""),
+            "detail": g.get("detail"),
+            "current_section": g.get("current_section"),
+            "context": g.get("context"),
+        }
+        for g in data["goals"]
+    ]
 
     today_str = datetime.now().strftime("%Y-%m-%d")
     if data["date"] != today_str:
@@ -941,7 +984,7 @@ def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int) -> di
     return {
         "date": data["date"],
         "time_budget_minutes": data.get("time_budget_minutes"),
-        "goal_text": data["goal_text"],
+        "goals": goals,
         "target_count": target_count,
         "progress": min(progress, target_count),
         "completed": progress >= target_count,
