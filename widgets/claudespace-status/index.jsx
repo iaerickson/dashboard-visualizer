@@ -56,61 +56,77 @@ const copyPrompt = (promptText, el) => {
 // — see dashboard-visualizer/README.md for the one-time symlink setup that
 // keeps this file live without manual re-copying.
 //
-// TINY/BIG MODE (2026-07-31, trigger mechanism replaced 2026-08-04): the
-// card defaults to a compact "tiny" view (title + counts + a needs-Ian dot)
-// and expands to the full "big" view (resets, needs-Ian detail,
-// most-recent, sections, Needs Attention) via a click on the title (see
-// `card`'s own `&.is-expanded .expand` rule).
+// TINY/BIG MODE (2026-07-31, trigger mechanism revised twice on
+// 2026-08-04): the card defaults to a compact "tiny" view (title + counts
+// + a needs-Ian dot) and expands to the full "big" view (resets, needs-Ian
+// detail, most-recent, sections, Needs Attention) on hover OR a click on
+// the title (see `card`'s own `&.is-expanded .expand` rule).
 //
-// History, kept for context: this went through three hover-based attempts,
-// each one because the last still collapsed unexpectedly - (1) pure CSS
-// `:hover`, flaky around scroll/reflow in the WebView; (2)
-// `onMouseEnter`/`onMouseLeave` toggling a literal `is-expanded` class,
-// still collapsed mid-transit moving between sections; (3) a 12-second
-// collapse-grace-period timer, which fixed the boundary issues but
-// introduced a NEW bug - hovering the title itself for long enough to
-// cross a refresh tick could revert to mini with no mouse movement at all
-// (see `cardExpanded`'s own comment below for that root cause). Rather
-// than a fourth hover-timing patch, Ian's own pick replaced the whole
-// mechanism: "clicking it [the title] toggles mini/big mode... title
-// becomes the single on/off control for the whole card." No timers, no
-// grace windows, no ambiguity about whether the pointer "really" left -
-// see `toggleExpanded` below. The expanded view itself still scrolls (one
-// scroll region, see card's `&.is-expanded .expand` rule) rather than
-// being height-unbounded, since full unfiltered section lists (25 idea
-// items, etc.) can run long.
+// History, kept for context: three hover-only attempts, each one because
+// the last still collapsed unexpectedly - (1) pure CSS `:hover`, flaky
+// around scroll/reflow in the WebView; (2) `onMouseEnter`/`onMouseLeave`
+// toggling a literal `is-expanded` class, still collapsed mid-transit
+// moving between sections; (3) a 12-second collapse-grace-period timer,
+// which fixed the boundary issues but introduced a NEW bug - hovering the
+// title itself for long enough to cross a refresh tick could revert to
+// mini with no mouse movement at all (root cause: Übersicht re-renders on
+// every refreshFrequency tick regardless of hover, and a reshaped tree can
+// birth a fresh DOM node mid-hover with none of the old node's classList
+// history - a stationary cursor never re-fires mouseenter on it). Ian's
+// first fix for that: replace hover entirely with a click toggle on the
+// title. Tried live, then reversed the same day - "add hover back
+// alongside click... both ways work" - so this is now BOTH: the whole
+// card still hover-expands/collapses exactly like attempt (3) above (see
+// `armCollapse`/`disarmCollapse`), and the title also has an explicit
+// click toggle for a way in or out that doesn't depend on hover at all
+// (see `toggleExpanded`). Both read/write the same `cardExpanded` flag, so
+// whichever one fires last wins - clicking to collapse while still
+// hovering stays collapsed until the pointer actually leaves and
+// re-enters, or gets clicked again.
+const COLLAPSE_GRACE_MS = 12000
+
 // Module-level flag (2026-08-04). Tracks expanded/collapsed state in a
 // plain module-level variable rather than relying solely on the DOM node's
 // own classList - survives node replacement since it's just JS, not a DOM
 // property. render() below bakes it directly into the className on every
 // single render pass, so any freshly-created node (e.g. after an Übersicht
 // refresh reshapes the tree - several siblings render conditionally, like
-// `daily_goal &&`) is correctly classed from birth.
-//
-// Trigger mechanism replaced entirely (2026-08-04), per Ian's own explicit
-// pick: "clicking it" toggles mini/big mode - "title becomes the single
-// on/off control for the whole card." This replaces THREE prior rounds of
-// hover-based mechanisms (pure CSS :hover, then mouseenter/mouseleave with
-// a 12s collapse-grace-timer, each one built after the last still
-// mis-collapsed on Ian in some edge case - boundary flicker, mid-scroll
-// collapse, and finally the title-hover revert bug fixed earlier this same
-// round). A plain click toggle sidesteps that whole class of bug - no
-// timers, no grace windows, no ambiguity about whether the pointer
-// "really" left the card. Whole-card hover-to-expand is gone; the title is
-// now the only way in or out of big mode.
+// `daily_goal &&`) is correctly classed from birth regardless of whether a
+// fresh mouseenter ever fires on it - the same root cause noted above,
+// just now handled at the state layer instead of by removing hover.
 let cardExpanded = false
+
+const setExpanded = (el, expanded) => {
+  cardExpanded = expanded
+  if (el) el.classList.toggle("is-expanded", expanded)
+}
+
+const armCollapse = (el) => {
+  if (el._collapseTimer) clearTimeout(el._collapseTimer)
+  el._collapseTimer = setTimeout(() => {
+    setExpanded(el, false)
+    el._collapseTimer = null
+  }, COLLAPSE_GRACE_MS)
+}
+
+const disarmCollapse = (el) => {
+  if (el._collapseTimer) {
+    clearTimeout(el._collapseTimer)
+    el._collapseTimer = null
+  }
+  setExpanded(el, true)
+}
 
 const toggleExpanded = (e) => {
   e.stopPropagation()
-  cardExpanded = !cardExpanded
-  // Instant visual feedback on the actual DOM node - title is always
-  // render()'s first direct child inside the card root, so parentElement
-  // is reliably the card itself. Not strictly required for correctness
-  // (render() also bakes cardExpanded into className on the next poll -
-  // see card's own className below) but avoids waiting up to
-  // refreshFrequency (20s) for a click to visibly do anything.
+  // Title is always render()'s first direct child inside the card root,
+  // so parentElement is reliably the card itself.
   const cardEl = e.currentTarget.parentElement
-  if (cardEl) cardEl.classList.toggle("is-expanded", cardExpanded)
+  if (cardEl && cardEl._collapseTimer) {
+    clearTimeout(cardEl._collapseTimer)
+    cardEl._collapseTimer = null
+  }
+  setExpanded(cardEl, !cardExpanded)
 }
 
 export const command =
@@ -2089,8 +2105,23 @@ export const render = (state) => {
   const hasResets = (usage_resets && usage_resets.length > 0) || session_reset || personal_health
 
   return (
-    <>
-    <div className={cardExpanded ? `${card} is-expanded` : card}>
+    // Plain wrapper div (2026-08-04), not a JSX fragment shorthand -
+    // Übersicht's JSX transform errored on the fragment shorthand with
+    // "Can't find variable: React" (fragments desugar to React.Fragment, which needs a
+    // React global this environment doesn't inject; every other element
+    // here compiles to plain function calls that don't need one). An
+    // unstyled div is a no-op for layout/positioning purposes - it's
+    // `position: static`, so it doesn't become the nearest positioned
+    // ancestor for `SkillsTab`'s own `position: absolute` (that's still
+    // whatever Übersicht's outer widget container provides, unchanged from
+    // before this wrapper existed) - it's only here so `card` and
+    // `SkillsTab` can be siblings without a fragment.
+    <div>
+    <div
+      className={cardExpanded ? `${card} is-expanded` : card}
+      onMouseEnter={(e) => disarmCollapse(e.currentTarget)}
+      onMouseLeave={(e) => armCollapse(e.currentTarget)}
+    >
       <div className={`${title} ${clickableCursor}`} onClick={toggleExpanded}>Commandspace</div>
 
       {/* 2026-07-31, per Ian: mini mode was inconsistent - Done showed "0"
@@ -2276,6 +2307,6 @@ export const render = (state) => {
       </div>
     </div>
     {cardExpanded && <SkillsTab skills={skills} />}
-    </>
+    </div>
   )
 }

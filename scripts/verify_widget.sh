@@ -84,6 +84,26 @@ EOF
   fi
 done
 
+# --- 1.5. No JSX fragment shorthand (2026-08-04, real bug found live) ---
+# `<>...</>` parses as valid JS/JSX (step 1 above wouldn't catch this - it's
+# a RUNTIME failure, not a syntax error) but crashes this environment at
+# render time with "Can't find variable: React" - fragments desugar to
+# React.Fragment, which needs a React global Übersicht doesn't inject here
+# (every other element in these widgets compiles to plain function calls
+# that don't need one). Found live when SkillsTab needed a second top-level
+# sibling next to `card` - use a plain wrapper <div> instead (see
+# claudespace-status/index.jsx's own comment where this happened).
+for WIDGET_JSX in "$REPO_DIR"/widgets/*/index.jsx; do
+  [ -e "$WIDGET_JSX" ] || continue
+  WIDGET_NAME="$(basename "$(dirname "$WIDGET_JSX")")"
+  if grep -qE '<>|</>' "$WIDGET_JSX"; then
+    echo "[FAIL] $WIDGET_NAME/index.jsx uses JSX fragment shorthand (<>...</>) - known broken in this environment, use a plain wrapper div instead"
+    OVERALL_OK=1
+  else
+    echo "[ok] $WIDGET_NAME/index.jsx has no JSX fragment shorthand"
+  fi
+done
+
 # --- 2. status_summary.py runs clean ---
 if python3 "$REPO_DIR/scripts/status_summary.py" "$CLAUDE_SPACE" > /dev/null; then
   echo "[ok] status_summary.py runs clean against $CLAUDE_SPACE"

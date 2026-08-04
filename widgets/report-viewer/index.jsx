@@ -307,7 +307,15 @@ export const render = (state) => {
           {report && <span className={panelMeta}>{formatHoursAgo(report.hours_ago)}</span>}
         </div>
         {report ? (
-          <>
+          // Plain wrapper div, not a JSX fragment shorthand (2026-08-04) - fragments
+          // crash this environment at render time ("Can't find variable:
+          // React"); see claudespace-status/index.jsx's own comment on the
+          // same bug, found live while building its Skills Tray. This was
+          // a second, still-latent instance of the same mistake - never
+          // triggered yet since this widget isn't symlinked live on the
+          // desktop, caught instead by verify_widget.sh's new fragment
+          // check (added the same round specifically because of this).
+          <div>
             {completed && (
               <ul className={bulletList}>
                 {completed.slice(0, BULLET_CAP).map((item, i) => (
@@ -326,7 +334,7 @@ export const render = (state) => {
               </ul>
             )}
             {!completed && !needsYou && <div className={emptyNote}>nothing to report</div>}
-          </>
+          </div>
         ) : (
           <div className={emptyNote}>no usage-scheduler report yet</div>
         )}
