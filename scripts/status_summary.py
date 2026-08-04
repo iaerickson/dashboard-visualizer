@@ -554,14 +554,37 @@ def load_usage_resets(config_path: Path, now: datetime) -> list[dict] | None:
     return results or None
 
 
+# SESSION_WINDOW_HOURS_DEFAULT (2026-08-04) - Anthropic's own account-level
+# session window (see dashboard-visualizer/README.md's research on this).
+# Used only as a FALLBACK when config/session_reset.json doesn't specify its
+# own "session_window_hours" (older configs, or a manual report that didn't
+# include it) - see load_session_reset's own comment for why this is now a
+# separate field from hours_from_report.
+SESSION_WINDOW_HOURS_DEFAULT = 5.0
+
+
 def load_session_reset(config_path: Path, now: datetime, last_activity_mtime: float | None = None) -> dict | None:
     """Reads config/session_reset.json - a MANUALLY reported anchor point, not
     something computed live (the ~5hr session window is rolling/usage-dependent,
     no fixed clock - see dashboard-visualizer/README.md). Format:
-    {"reported_at": "<ISO timestamp>", "hours_from_report": 1.0}
-    Ian reports "resets in X hours" at some moment; this just counts down from
-    that anchor and honestly shows how long ago it was reported, since the
-    number drifts out of truth the more time passes without a fresh report.
+    {"reported_at": "<ISO timestamp>", "hours_from_report": 1.0, "session_window_hours": 5.0}
+    Ian reports "X left, resets in Y hours" at some moment; this just counts
+    down from that anchor and honestly shows how long ago it was reported,
+    since the number drifts out of truth the more time passes without a
+    fresh report.
+
+    hours_from_report vs. session_window_hours (2026-08-04, real bug fix):
+    these used to be the SAME number, which was wrong the moment Ian reports
+    a REMAINING amount partway through a window rather than the window's
+    full length - e.g. "3h18m left" partway through a real ~5hr window. Using
+    that 3.3 as both the countdown target AND the bar's 100%-full reference
+    made the bar render as nearly full (3.3 remaining out of a 3.3 "total"),
+    when it should read as ~66% (3.3 remaining out of the real 5hr window).
+    hours_from_report now ONLY drives the actual countdown/target (unchanged
+    behavior); session_window_hours is the separate, comparatively stable
+    "how long is a full window" figure the bar's fraction is measured
+    against - falls back to SESSION_WINDOW_HOURS_DEFAULT if the config
+    doesn't set it (e.g. an older report that predates this field).
 
     last_activity_mtime (2026-08-04) is the raw timestamp from
     latest_tracker_activity_mtime - see the reset-on-first-activity block
@@ -583,6 +606,7 @@ def load_session_reset(config_path: Path, now: datetime, last_activity_mtime: fl
         reported_at = reported_at.replace(tzinfo=None)
 
     total_hours = float(data["hours_from_report"])
+    window_hours = float(data.get("session_window_hours") or SESSION_WINDOW_HOURS_DEFAULT)
 
     # Reset-on-first-activity (2026-08-04), replacing the earlier
     # roll-forward-by-fixed-cycles approach (2026-08-02). Per Ian, live: the
@@ -615,13 +639,25 @@ def load_session_reset(config_path: Path, now: datetime, last_activity_mtime: fl
             activity_at = datetime.fromtimestamp(last_activity_mtime)
             if activity_at > expires_at:
                 reported_at = activity_at
+                # Fresh window (2026-08-04): a brand-new session that just
+                # started has its FULL length ahead of it, not whatever
+                # partial amount was last manually reported (e.g. if Ian's
+                # last report was "3h18m left," that 3.3 was correct for
+                # THAT window's remaining countdown, but the next window
+                # after it starts with the full session_window_hours ahead,
+                # not another 3.3hr cycle). Reset both in-memory (so this same
+                # poll's target/fraction below are already right) and
+                # persisted.
+                total_hours = window_hours
                 try:
                     data["reported_at"] = reported_at.isoformat(timespec="seconds")
+                    data["hours_from_report"] = window_hours
                     data["note"] = (
                         f"Auto-reset by status_summary.py on {now.isoformat(timespec='seconds')} - "
                         "the previous session window expired and this is the first tracker "
                         "activity (a project README update) seen since then, treated as the start "
-                        "of the new session window. Estimate based on local file activity, not a "
+                        "of the new session window (full session_window_hours ahead of it, not the "
+                        "prior partial countdown). Estimate based on local file activity, not a "
                         "true live sync (no session-reset API exists) - overwritten the moment Ian "
                         "reports a fresh 'resets in Xh Ym.'"
                     )
@@ -636,15 +672,21 @@ def load_session_reset(config_path: Path, now: datetime, last_activity_mtime: fl
     # elapsed_fraction (2026-07-31, per Ian: "I don't need rolling/approximate...
     # I'd love a little time bar that ticks down... and restarts when session
     # timer restarts"). This doesn't change what's fundamentally knowable - the
-    # window's real length is still whatever Ian last reported, not something
-    # this script can detect live (see this function's own docstring) - it's a
-    # display upgrade, not a new capability. "Restarts when session restarts"
-    # already just works with no extra code: this is recomputed fresh from
-    # session_reset.json every poll, so the moment Ian reports a new
-    # reported_at/hours_from_report, the fraction (and therefore the bar) jumps
-    # back to near-0 on its own. Clamped to [0, 1] so a stale (already_passed)
+    # window's real length is still whatever Ian last reported (session_window_hours),
+    # not something this script can detect live (see this function's own
+    # docstring) - it's a display upgrade, not a new capability. "Restarts
+    # when session restarts" already just works with no extra code: this is
+    # recomputed fresh from session_reset.json every poll, so the moment Ian
+    # reports a new reported_at/hours_from_report, the fraction (and
+    # therefore the bar) jumps to reflect the new numbers on its own.
+    # Denominator switched from total_hours to window_hours (2026-08-04, real
+    # bug fix) - see this function's own comment above on why those are now
+    # two different numbers: the bar should read "how much of the real ~5hr
+    # window is left," not "how much of whatever was just reported is left"
+    # (the latter always reads as nearly-full right after any report, which
+    # is what Ian caught live). Clamped to [0, 1] so a stale (already_passed)
     # anchor renders as a full bar rather than overshooting past it.
-    elapsed_fraction = 1.0 if total_hours <= 0 else 1 - (seconds_left / (total_hours * 3600))
+    elapsed_fraction = 1.0 if window_hours <= 0 else 1 - (seconds_left / (window_hours * 3600))
     elapsed_fraction = max(0.0, min(1.0, elapsed_fraction))
 
     return {

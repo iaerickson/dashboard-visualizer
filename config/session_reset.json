@@ -1,5 +1,6 @@
 {
-  "reported_at": "2026-08-04T06:07:36",
-  "hours_from_report": 4.1667,
-  "note": "Auto-rolled forward 2 cycle(s) by status_summary.py on 2026-08-04T09:24:03 - rolling estimate using the last reported cadence, not a true live sync (no session-reset API exists to confirm the real boundary). Overwritten the moment Ian reports a fresh 'resets in Xh Ym.'"
+  "reported_at": "2026-08-04T09:50:26",
+  "hours_from_report": 3.3,
+  "session_window_hours": 5.0,
+  "note": "Manually reported by Ian (2026-08-04): 'resets in 3h 18m' out of the real ~5hr session window - resets the countdown to a fresh, accurate anchor. session_window_hours added the same day so the bar reads 3h18m/5h (~66% full), not 3h18m/3h18m (~full) - see status_summary.py's load_session_reset comment."
 }
