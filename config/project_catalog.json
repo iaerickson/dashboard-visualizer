@@ -1,0 +1,84 @@
+{
+  "generated_at": "2026-07-31",
+  "note": "Time estimates here are a cache, not something status_summary.py computes itself - real time-assessor-style judgment needs an LLM pass, not a regex. A Claude session (log-pose, automation-scout, or a dedicated refresh) should update this file whenever a project's remaining scope changes meaningfully. Stale entries aren't dangerous, just less useful - no risk to leaving one outdated for a while.",
+  "projects": {
+    "recast": {
+      "time_estimate": "external, live repo (Vercel) — not tracked as an open item here; feature work happens in its own roadmap"
+    },
+    "jrpg-portfolio": {
+      "time_estimate": "external, live site — not tracked as an open item here"
+    },
+    "project-tracker": {
+      "time_estimate": "all listed sub-projects checked off — ongoing living system, not a finishable checklist"
+    },
+    "usage-scheduler": {
+      "time_estimate": "~20-40 min per remaining open item (guardrails, cadence decision) — mostly needs your input, not build time"
+    },
+    "dashboard-visualizer": {
+      "time_estimate": "Phase 1 done; Phase 2 (real design/animation pass) is a genuine multi-session effort, no tight bound yet"
+    },
+    "historyman": {
+      "time_estimate": "~1-2 hrs across 4 remaining open items — mostly Claude-doable, low input needed"
+    },
+    "cultureman": {
+      "time_estimate": "mostly blocked on your decisions (name/format/trigger) — ~15-20 min of decisions, then passive use over weeks"
+    },
+    "ianlogger": {
+      "time_estimate": "~15-30 min — one real policy decision (privacy/scope) needed from you"
+    },
+    "learnerman": {
+      "time_estimate": "blocked on the historyman/cultureman/learnerman merge decision — ~10 min decision, then ~20-30 min to build out"
+    },
+    "system-healthcheck": {
+      "time_estimate": "~1-2 hrs remaining across a few sub-projects (tech-stack watch, report surface decision), none urgent"
+    },
+    "daily-pull": {
+      "time_estimate": "mostly blocked on other projects (learnerman, usage-scheduler delivery) finishing first"
+    },
+    "release-pipeline": {
+      "time_estimate": "~1-2 hrs once you decide the auto-vs-approval boundary — not started otherwise"
+    },
+    "refine": {
+      "time_estimate": "~15-20 min — one easy knockout (test against something real), no input needed"
+    },
+    "log-pose": {
+      "time_estimate": "~10-15 min — small update to reference dashboard-visualizer now that it exists"
+    },
+    "time-assessor": {
+      "time_estimate": "~5 min decision from you (live vs upfront estimates); otherwise just needs real use to calibrate"
+    },
+    "overnight-auto-execute": {
+      "time_estimate": "~15-20 min — same small dashboard-visualizer update as log-pose, plus a real on-demand test"
+    },
+    "tutor": {
+      "time_estimate": "~5 min decision (save sessions or not) — otherwise stable for now"
+    },
+    "home-tech-sync": {
+      "time_estimate": "blocked entirely on you — needs your device inventory before Claude can move at all"
+    },
+    "privacy-security": {
+      "time_estimate": "~30-45 min for a first real footprint audit, plus a scope decision from you first"
+    },
+    "dj-library-manager": {
+      "time_estimate": "duplicate finder done; ~1-2 hrs each for the remaining 4 pieces (stale-cleanup, sync, IA pipeline, Bandcamp)"
+    },
+    "wellbeing-check": {
+      "time_estimate": "blocked entirely on you — can't responsibly guess what 'unhealthy pattern' means without your input"
+    },
+    "dev-identity": {
+      "time_estimate": "~15 min naming decision unlocks most of the rest; low urgency per your own deprioritization"
+    },
+    "mentor-mode": {
+      "time_estimate": "~15-20 min of decisions from you (teaching signal, career connection), then ongoing"
+    },
+    "skill-auditor": {
+      "time_estimate": "done for this pass — revisit after more real use surfaces issues"
+    },
+    "automation-scout": {
+      "time_estimate": "done for this pass — nightly integration being wired in today"
+    },
+    "wishlist": {
+      "time_estimate": "not a project — see WISHLIST.md directly"
+    }
+  }
+}
