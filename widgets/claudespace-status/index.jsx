@@ -1950,24 +1950,47 @@ const AttentionEntryRow = ({ entry, indent }) => (
 // instead of Needs Attention's red so it still reads as its own category,
 // not a re-skin.
 //
-// Detail panel upgraded same day to real SubFields, per Ian's further
-// follow-up: "maybe sub sections can be summary, an explandable read out
-// of what section it currently lives in and maybe the previous context
-// piece or whatever." Same SubField component ProjectRow already uses for
-// Summary/Last completed/Next steps/Time estimate - each of these three is
-// independently hover-expandable, not one flat block of text. All three
-// fields (`detail`/`current_section`/`context`) are optional (see
-// status_summary.py's load_daily_goal normalization) - a goal with none of
-// them still renders fine with no detail panel at all, same as a
-// ProjectRow item with no summary.
+// Detail panel went through two shapes the same day. First pass used real
+// SubFields (one independently-expandable sub-panel each for Summary/
+// Currently in/Context), matching ProjectRow's own multi-field detail -
+// per Ian's ask: "maybe sub sections can be summary, an explandable read
+// out of what section it currently lives in and maybe the previous
+// context piece." Walked back after seeing it live: "the style of goals
+// explandable still is weird and different than the others... match the
+// font and styling of the text of the other expandables so its standard."
+// Root issue: GoalRow's OWN row is already AttentionEntryRow's exact
+// shape, but its detail panel had switched to ProjectRow's heavier,
+// separately-hoverable multi-SubField pattern instead - two different
+// rows in this file claiming the same "attentionRow" identity but
+// resolving their detail panel two different ways. Reverted to ONE flat
+// `detail`/`detailInner` block, exactly like AttentionEntryRow's own -
+// `formatGoalDetail` below just joins whichever of detail/current_section/
+// context are present into one readable block instead of three separate
+// hover targets.
 const goalPrompt = (title, detail) =>
   `Help work on today's Commandspace goal: ${title}.` +
   (detail ? ` ${detail}` : "") +
   ` Before starting: read PROCESS.md and PHILOSOPHY.md in this folder for the ` +
   `tracker's conventions.`
 
+const formatGoalDetail = (goal) => {
+  const parts = []
+  if (goal.detail) parts.push(goal.detail)
+  if (goal.current_section) parts.push(`Currently in: ${goal.current_section}.`)
+  if (goal.context) parts.push(goal.context)
+  return parts.join(" ")
+}
+
+// Bullet icon shrunk to 9px (2026-08-04), smaller than the 12px default
+// every other row icon in this file uses - per Ian, twice: "the mini goal
+// bullets are a nice touche but theyre too big" and then, still not small
+// enough after the first pass, "i like the bullet icons make them
+// smaller." Deliberately breaks from matching attentionKind's usual
+// icon size exactly, since Ian's calling these "bullets" (a lighter,
+// decorative marker) rather than a semantic action icon like IconAsk/
+// IconBlocked.
 const GoalRow = ({ goal, completed }) => {
-  const hasDetail = goal.detail || goal.current_section || goal.context
+  const detailText = formatGoalDetail(goal)
   return (
     <div
       className={
@@ -1981,28 +2004,12 @@ const GoalRow = ({ goal, completed }) => {
       }}
     >
       <div className={attentionRowTop}>
-        <span className={attentionKind}>{completed ? <IconGoalDone /> : <IconGoal />}</span>
+        <span className={attentionKind}>{completed ? <IconGoalDone size={9} /> : <IconGoal size={9} />}</span>
         <span>{goal.title}</span>
       </div>
-      {hasDetail && (
+      {detailText && (
         <div className={`detail ${detail}`} style={{ borderLeftColor: NERV_ORANGE }}>
-          <div className={detailInner}>
-            {goal.detail && (
-              <SubField label="Summary">
-                <div className={detailSummary}>{goal.detail}</div>
-              </SubField>
-            )}
-            {goal.current_section && (
-              <SubField label="Currently in">
-                <div>{goal.current_section}</div>
-              </SubField>
-            )}
-            {goal.context && (
-              <SubField label="Context">
-                <div>{goal.context}</div>
-              </SubField>
-            )}
-          </div>
+          <div className={detailInner}>{detailText}</div>
         </div>
       )}
     </div>
