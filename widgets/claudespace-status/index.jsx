@@ -1,5 +1,5 @@
 import { css, run } from "uebersicht"
-import { THEME } from "./src/theme.config"
+import { THEME } from "../src/theme.config"
 
 // Copy-to-clipboard on click (2026-07-31, renamed from openInClaude - it no
 // longer opens Claude). History: this used to also shell out to
@@ -152,12 +152,14 @@ export const className = `
 // type, angular clipped corners instead of rounded ones, thin hairline
 // rules, bracketed labels, uppercase tracking, a slow ambient scanline
 // pulse. No logos/copyrighted marks reproduced - just the palette + layout
-// language. Colors live in their own file under ./src/themes/, with
-// ./src/theme.config.js as the one pointer you edit to swap which theme
-// file is active (Ian: "could be fun" to swap styles later) - see those two
-// files for how to add or switch styles. Both live under src/ (not the
-// widget's own top-level folder) so Übersicht doesn't list them as their
-// own separate widgets - see theme.config.js's own comment for why.
+// language. Colors live in their own file under widgets/src/themes/, with
+// widgets/src/theme.config.js as the one pointer you edit to swap which
+// theme file is active (Ian: "could be fun" to swap styles later) - see
+// those two files for how to add or switch styles. Moved 2026-08-04 from a
+// per-widget src/ folder to a shared top-level widgets/src/ so every widget
+// (claudespace-status, tip-of-day, and future ones) can import the exact
+// same palette - still named literally "src" so Übersicht doesn't list it
+// as its own separate widget (see theme.config.js's own comment for why).
 const NERV_ORANGE = THEME.orange
 const NERV_AMBER = THEME.amber
 const NERV_BG = THEME.bg

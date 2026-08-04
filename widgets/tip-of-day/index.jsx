@@ -1,5 +1,5 @@
 import { css } from "uebersicht"
-import { THEME } from "../claudespace-status/src/theme.config"
+import { THEME } from "../src/theme.config"
 
 // tip-of-day — Phase 3, second module for dashboard-visualizer (2026-08-03).
 //
