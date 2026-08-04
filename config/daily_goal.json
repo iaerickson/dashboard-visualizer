@@ -1,0 +1,7 @@
+{
+  "date": "2026-08-04",
+  "time_budget_minutes": 40,
+  "goal_text": "Decide `mentor-mode`'s explain-vs-just-do-it line, and `privacy-security`'s scope call (personal habit vs. real tool).",
+  "target_count": 2,
+  "baseline": {"needs_ian_count": 24, "idea_total": 23, "done_recent": 4}
+}
