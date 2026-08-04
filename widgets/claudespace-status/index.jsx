@@ -591,24 +591,21 @@ const title = css`
   }
 `
 
-// Bolded/primary-color pass (2026-08-04), per Ian, from a screenshot: "put
-// in this last touched space but have primary colors or something to bold
-// out." Was flat NERV_TEXT_DIM the whole line - now the label stays dim/
-// muted (it's just a caption) while the actual project name pops in bold
-// NERV_ORANGE, the theme's one true "primary" accent color used everywhere
-// else in this file for the same purpose (section headers, warning counts).
-// Already updates live as things get touched (this reads
-// most_recent_project fresh every 20s poll, no new logic needed for that
-// half of the ask) - this pass is purely the color/weight treatment.
 // Daily goal panel (2026-08-04), per Ian: "implement like a goal for day...
 // a way to customize and set and suggest a very easy goal for the day."
 // This panel is purely a DISPLAY - the actual goal text and target come
 // from config/daily_goal.json, written by the goal-for-day skill (see that
 // project's SKILL.md), never generated here (same free/deferred split as
 // everything else in this file - deciding today's actual goal is real
-// judgment over full tracker context). Bold/primary treatment matches the
-// same round's Last Touched restyle - goalText is intentionally the same
-// weight/prominence as that row's project-name <strong>.
+// judgment over full tracker context).
+// Pared down same day, per Ian's direct follow-up: an earlier pass also
+// bolded/oranged the Last Touched row below and added a dim caption +
+// meta line here - he clarified he only wanted "orange bold text only for
+// the goal... so it doesn't also have the gray text," and Last Touched
+// should stay exactly as it was before. Reverted Last Touched (see recent's
+// own comment below) and simplified this panel to a single bold-orange
+// line, nothing else - no caption above it, no dim progress/budget line
+// below it.
 const goalPanel = css`
   margin-top: 8px;
   padding: 8px 10px;
@@ -617,54 +614,36 @@ const goalPanel = css`
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
 `
 
-const goalLabel = css`
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: ${NERV_ORANGE};
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 3px;
-`
-
 const goalText = css`
   font-size: 12px;
-  font-weight: 600;
-  color: ${NERV_TEXT};
+  font-weight: 700;
+  color: ${NERV_ORANGE};
   line-height: 1.4;
 `
 
 // "Crossed off" (2026-08-04), per Ian: "maybe the goal can be crossed off
 // once it's achieved." Plain line-through + dimmed color once
 // daily_goal.completed flips true (see status_summary.py's load_daily_goal
-// completion proxy) - IconGoalDone appears in the label at the same
-// moment, "a little success... icon takes its place."
+// completion proxy) - IconGoalDone prepends the text at the same moment,
+// "a little success... icon takes its place."
 const goalTextDone = css`
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: ${NERV_TEXT_DIM};
   line-height: 1.4;
   text-decoration: line-through;
 `
 
-const goalMeta = css`
-  font-size: 9px;
-  color: ${NERV_TEXT_DIM};
-  margin-top: 4px;
-`
-
+// Reverted (2026-08-04) back to its original plain/dim styling, per Ian:
+// "keep last touched how it was" - a same-round bold/orange pass got
+// walked back once he clarified the orange-bold treatment was meant for
+// the new goal panel above, not this row too.
 const recent = css`
   margin-top: 8px;
   font-size: 11px;
   color: ${NERV_TEXT_DIM};
   text-transform: uppercase;
   letter-spacing: 0.03em;
-
-  & strong {
-    color: ${NERV_ORANGE};
-    font-weight: 700;
-  }
 `
 
 const resetsSection = css`
@@ -1890,23 +1869,15 @@ export const render = (state) => {
 
           {daily_goal && (
             <div className={goalPanel}>
-              <div className={goalLabel}>
-                {daily_goal.completed && <IconGoalDone />}
-                {daily_goal.completed ? "Today's Goal — Done" : "Today's Goal"}
+              <div className={daily_goal.completed ? goalTextDone : goalText}>
+                {daily_goal.completed && <IconGoalDone />} {daily_goal.goal_text}
               </div>
-              <div className={daily_goal.completed ? goalTextDone : goalText}>{daily_goal.goal_text}</div>
-              {!daily_goal.completed && (
-                <div className={goalMeta}>
-                  {daily_goal.progress}/{daily_goal.target_count}
-                  {daily_goal.time_budget_minutes ? ` · ~${daily_goal.time_budget_minutes}m budget` : ""}
-                </div>
-              )}
             </div>
           )}
 
           {most_recent_project && (
             <div className={recent}>
-              Last touched: <strong>{most_recent_project.name}</strong> ({formatHoursAgo(most_recent_project.hours_ago)})
+              Last touched: {most_recent_project.name} ({formatHoursAgo(most_recent_project.hours_ago)})
             </div>
           )}
 
