@@ -1716,13 +1716,22 @@ export const render = (state) => {
                   (overdue always false while away, forced server-side), and
                   auto-resets last_break_at the moment activity resumes -
                   this just swaps the icon/color to match that state. */}
+              {/* staleText shortened (2026-08-04), per Ian: the old
+                  "overdue — take a break (click to reset)" wrapped to two
+                  lines inside resetBarCol's fixed 150px width, making this
+                  gauge visibly taller than SESSION underneath it - uneven
+                  spacing between them. valueText already reads "overdue" in
+                  bold right above this line, so repeating it here was pure
+                  redundancy anyway; trimming to just the actual instruction
+                  keeps it on one line and brings the two gauges back to
+                  matching height. */}
               {personal_health && (
                 <ResetGauge
                   label={personal_health.label}
                   valueText={formatHealthGauge(personal_health)}
                   remainingFraction={1 - personal_health.elapsed_fraction}
                   stale={personal_health.overdue}
-                  staleText="overdue — take a break (click to reset)"
+                  staleText="click to reset"
                   onClick={personal_health.overdue ? resetHealthTimer : undefined}
                   icon={personal_health.away ? <IconSleep /> : <IconHeartbeat />}
                 />
