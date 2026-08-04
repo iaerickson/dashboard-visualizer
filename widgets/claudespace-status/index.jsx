@@ -119,9 +119,13 @@ const disarmCollapse = (el) => {
 
 const toggleExpanded = (e) => {
   e.stopPropagation()
-  // Title is always render()'s first direct child inside the card root,
-  // so parentElement is reliably the card itself.
-  const cardEl = e.currentTarget.parentElement
+  // Uses the captured `cardNode` ref (see its own comment below) rather
+  // than `e.currentTarget.parentElement` (2026-08-04) - that DOM-traversal
+  // trick broke the moment `card` split into `cardOuter`/`cardInner`
+  // (title's parent is now cardInner, one level short of the real root
+  // that carries `is-expanded`). A captured ref doesn't care how many
+  // wrapper levels sit in between.
+  const cardEl = cardNode
   if (cardEl && cardEl._collapseTimer) {
     clearTimeout(cardEl._collapseTimer)
     cardEl._collapseTimer = null
@@ -132,55 +136,63 @@ const toggleExpanded = (e) => {
 // cardNode / resetsSectionNode (2026-08-04) - captured via plain ref
 // callbacks (no hooks available in this environment - see this file's
 // other module-level-flag comments for why direct DOM refs are already the
-// established pattern here) so the Skills Tray, which renders as a SIBLING
-// of `card` and can't see its layout through normal CSS cascade, can (a)
-// still participate in card's own hover-intent collapse timer (see
-// SkillsTab's own onMouseEnter/onMouseLeave, per Ian: "when this flips
-// out... that now needs to register as true since the tracker size has
-// expanded") and (b) measure exactly where to sit vertically (see
-// positionSkillsTab below) instead of guessing a fixed pixel offset that
-// silently drifts out of alignment the moment a row above it changes
-// height.
+// established pattern here). `cardNode` is now the single source of truth
+// `toggleExpanded`/`armCollapse`/`disarmCollapse` all target (see
+// cardOuter's own comment for why the old `card` div split into
+// cardOuter/cardInner); `resetsSectionNode` exists purely so
+// positionSkillsTab (below) can measure exactly where to sit vertically
+// instead of guessing a fixed pixel offset that silently drifts out of
+// alignment the moment a row above it changes height.
 let cardNode = null
 let resetsSectionNode = null
 
-// positionSkillsTab (2026-08-04) - per Ian: the tab should "perfectly line
+// positionSkillsTab (2026-08-04) - per Ian: the tray should "perfectly line
 // up with the top of the big mode bar with the first orange line after
 // weekly usage," i.e. resetsSection's own bottom border. A fixed pixel
-// guess (the tab's original `top: 60px`) drifts the moment anything above
+// guess (the tray's original `top: 60px`) drifts the moment anything above
 // it changes height (a resets row added/removed, Daily Goals appearing,
 // etc.), and resetsSection's own real rendered height isn't even settled
-// immediately when the tab mounts - it's still mid CSS grid-expand
-// transition (`.expand`'s 0fr -> 1fr, ~780ms incl. delay) at that instant.
-// A ResizeObserver on resetsSection itself sidesteps both problems: it
-// fires on every box-size change, including the frames of that same
-// expand transition, so the tab tracks smoothly into its final position
-// instead of snapping there from a stale guess - and it stays correct
-// forever after with zero maintenance if the rows above it ever change.
-// Falls back to a plain constant if resetsSection isn't in the DOM at all
-// (hasResets false - no usage_resets/session_reset/personal_health
-// configured yet), so the tab still renders somewhere sane rather than at
-// 0,0.
+// immediately when the tray mounts - it's mid CSS grid-expand transition
+// (`.expand`'s 0fr -> 1fr) the whole time the card is opening. A
+// ResizeObserver on resetsSection itself sidesteps both problems: it fires
+// on every box-size change, including the frames of that same expand
+// transition, so the tray tracks smoothly into its final position in
+// lockstep with the rest of big mode opening, instead of snapping there
+// from a stale guess after the fact - and it stays correct forever after
+// with zero maintenance if the rows above it ever change.
+//
+// Retry loop added (2026-08-04) - SkillsTray is now ALWAYS rendered (see
+// its own comment on why it's no longer conditionally mounted), including
+// on the very first paint before any interaction, when ref-callback
+// ordering between resetsSection and the tray isn't something this code
+// can rely on. A few short retries covers the case where this ref fires
+// before resetsSectionNode/cardNode are captured, without needing an
+// exact ordering guarantee either way.
 let skillsTabObserver = null
 
 const positionSkillsTab = (tabEl) => {
   if (!tabEl) return
+  let attempts = 0
   const reposition = () => {
     if (!tabEl.isConnected) return
     if (resetsSectionNode && cardNode) {
       const sectionBottom = resetsSectionNode.getBoundingClientRect().bottom
       const cardTop = cardNode.getBoundingClientRect().top
       tabEl.style.top = `${Math.round(sectionBottom - cardTop)}px`
+      if (skillsTabObserver) skillsTabObserver.disconnect()
+      if (typeof ResizeObserver !== "undefined") {
+        skillsTabObserver = new ResizeObserver(reposition)
+        skillsTabObserver.observe(resetsSectionNode)
+      }
     } else {
       tabEl.style.top = "56px"
+      if (attempts < 10) {
+        attempts += 1
+        setTimeout(reposition, 60)
+      }
     }
   }
   reposition()
-  if (skillsTabObserver) skillsTabObserver.disconnect()
-  if (typeof ResizeObserver !== "undefined" && resetsSectionNode) {
-    skillsTabObserver = new ResizeObserver(reposition)
-    skillsTabObserver.observe(resetsSectionNode)
-  }
 }
 
 export const command =
@@ -502,7 +514,66 @@ const IconSleep = ({ size = 12, color = STATUS_BLUE }) => (
 // `fadeIn`/`scan`) gets hoisted globally by Emotion under its literal name,
 // so other elements outside `card`'s own box can reference it too if wanted
 // later.
-const card = css`
+// cardOuter / cardInner split (2026-08-04) - was one `card` div until the
+// Skills Tray needed to be "treated as part of big mode that expands and
+// collapses at the exact same time" (Ian, live, after seeing the tray pop
+// in/out on its own separate timing and briefly linger after a mini-mode
+// collapse - a real desync bug, not just a style nitpick). The old single
+// div HAD to keep `overflow: hidden` (needed for the ambient sweep
+// animation and the clipped-corner `clip-path` shape), which meant
+// anything meant to visually poke outside its bounds - like a tray bump -
+// could only exist as a totally separate SIBLING with its own JS-driven
+// mount/unmount and its own animation, decoupled from the card's real
+// expand state. That decoupling was the actual bug: two independently
+// timed things trying to look like one.
+// Split fixes it structurally instead of patching the symptom again:
+// `cardOuter` is a plain `position: relative` wrapper with NO overflow
+// clipping and owns the single source of truth (`is-expanded`, toggled by
+// `setExpanded`/`toggleExpanded`/`armCollapse`/`disarmCollapse` - unchanged
+// logic, just retargeted from the old `card` div to this one). `cardInner`
+// keeps every visual property the old `card` had (background/clip-path/
+// overflow/sweep/border/box-shadow) unchanged - it's still what actually
+// LOOKS like the card. SkillsTray now renders as a normal DOM CHILD of
+// cardOuter, a sibling of cardInner rather than of the whole widget -
+// close enough to escape cardInner's clipping (it's not nested inside
+// cardInner at all) while still being a real child that inherits
+// cardOuter's own `is-expanded` state via plain CSS, no separate JS
+// mount/unmount, no separate animation timing, no lingering possible.
+const cardOuter = css`
+  position: relative;
+
+  /* Real bug (2026-07-31), per Ian: "navigating items towards the bottom of
+     the scroll... quickly go back to mini... shouldn't collapse unless the
+     pointer exits the boundary of the big mode dimensions." Pure CSS :hover
+     was the trigger here, which is SUPPOSED to only react to the pointer's
+     actual screen position relative to this element's rendered box - but
+     that's exactly the class of thing that gets flaky around scroll/reflow
+     in a WebView (the 280ms exit-delay on expandWrap below was an earlier
+     patch for the same symptom, not a full fix). Switched to an explicit,
+     deterministic trigger instead: onMouseEnter/onMouseLeave on this
+     element's own root (see render()) toggle a literal is-expanded class
+     via classList - real DOM boundary-crossing events, not a CSS
+     pseudo-class re-derived every frame, so "collapse only when the
+     pointer truly leaves this element's box" is guaranteed by the
+     browser's own event model rather than approximated. No Accessibility
+     permission needed for this (that concern, noted elsewhere in this
+     file, is about OS-level click-to-expand outside the WebView -
+     mouseenter/mouseleave are plain in-page DOM events, same category as
+     every other classList toggle already used throughout this file). Now
+     living on cardOuter (not cardInner) so it also covers SkillsTray,
+     which is a sibling of cardInner but still a real child of this
+     element - hovering the tray bubbles up to this same listener, no
+     separate wiring needed. */
+  &.is-expanded .expand {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    pointer-events: auto;
+    margin-top: 12px;
+    transition-delay: 0s;
+  }
+`
+
+const cardInner = css`
   position: relative;
   overflow: hidden;
   background: ${NERV_BG};
@@ -540,39 +611,13 @@ const card = css`
     100% { top: 100%; }
   }
 
-  /* Real bug (2026-07-31), per Ian: "navigating items towards the bottom of
-     the scroll... quickly go back to mini... shouldn't collapse unless the
-     pointer exits the boundary of the big mode dimensions." Pure CSS :hover
-     was the trigger here, which is SUPPOSED to only react to the pointer's
-     actual screen position relative to this element's rendered box - but
-     that's exactly the class of thing that gets flaky around scroll/reflow
-     in a WebView (the 280ms exit-delay on expandWrap below was an earlier
-     patch for the same symptom, not a full fix). Switched to an explicit,
-     deterministic trigger instead: onMouseEnter/onMouseLeave on this card's
-     own root element (see render()) toggle a literal is-expanded class via
-     classList - real DOM boundary-crossing events, not a CSS pseudo-class
-     re-derived every frame, so "collapse only when the pointer truly leaves
-     this element's box" is guaranteed by the browser's own event model
-     rather than approximated. No Accessibility permission needed for this
-     (that concern, noted elsewhere in this file, is about OS-level
-     click-to-expand outside the WebView - mouseenter/mouseleave are plain
-     in-page DOM events, same category as every other classList toggle
-     already used throughout this file). */
-  &.is-expanded .expand {
-    grid-template-rows: 1fr;
-    opacity: 1;
-    pointer-events: auto;
-    margin-top: 12px;
-    transition-delay: 0s;
-  }
-
   /* Click confirmation (2026-07-31) - see copyPrompt()'s comment above for
      why this exists (the composer prefill doesn't survive the folder-trust
      dialog, so this is the real feedback a click happened at all). Plain
      literal class toggled via classList in JS, not an emotion-generated
      name, same "literal class alongside hash" trick as .expand/.nested/
      .detail elsewhere in this file - nested here so Emotion scopes it under
-     the card's own hashed class. */
+     this element's own hashed class. */
   .copied-flash {
     background: rgba(255, 107, 26, 0.28) !important;
     color: ${NERV_ORANGE} !important;
@@ -1198,48 +1243,58 @@ const groupNestedIndent = css`
 // Skills Tray (2026-08-04), per Ian: "i want to visualize and keep track
 // of how many skills we have created and get a visual read out of how
 // often they are getting run and brief descriptions of what they do."
-// Rendered as a SIBLING of `card` in render(), not a child - `card` has
-// its own `overflow: hidden` (needed for the ambient sweep animation and
-// its clipped-corner shape), which would clip a panel meant to visually
-// escape the card's own bounding box. Both `card` and this end up as
-// direct children of Übersicht's own outer widget container, so
-// `position: absolute` here sizes/positions relative to that same shared
-// box. Only ever rendered while `cardExpanded` (render()'s own guard) -
-// never present in mini mode at all, not just hidden by CSS.
 //
-// Redesigned (2026-08-04), per Ian, having lived with the first version:
-// "skills tray is kind of ugly. i dont want it to overlap anything on
-// command space... maybe a half circle that perfectly lines up with the
-// top of the big mode bar with the first orange line after weekly
-// usage. that half circle smoothly spins out in big mode and says skill
-// tray. moving the mouse over that to hover or click then cascades down
-// the skills." Replaces the old vertical "SKILLS" flag tab (fixed
-// `top: 60px` guess, flyout opening sideways back toward the card - which
-// is what read as overlapping/ugly) with:
-//   - a true half-circle bump (see skillsTabHandle - width == height/2,
-//     border-radius clamps the two right corners into an exact semicircle)
-//     sitting flush against the card's own right edge, vertically
-//     positioned via positionSkillsTab (see that function's own comment)
-//     so its flat top edge lands exactly on resetsSection's bottom
-//     border - "the first orange line after weekly usage" - instead of a
-//     guessed pixel offset that drifts.
-//   - a spin-in entrance (`tabSpinOut` keyframe) that plays once on mount,
-//     since this component only mounts the instant `cardExpanded` flips
-//     true - no extra JS trigger needed.
-//   - the flyout now drops straight DOWN from the bump ("cascades down
-//     the skills") instead of sideways, reusing the same grid 0fr->1fr
-//     reveal every other expandable list in this file already uses.
-//   - hover OR click both open it now (`&:hover .flyout, &.is-open
-//     .flyout` share the same rule; click toggles `is-open` via
-//     toggleSkillsTray below), not hover-only.
-//   - onMouseEnter/onMouseLeave call disarmCollapse/armCollapse on the
-//     captured `cardNode` (see that variable's own comment) so hovering
-//     the tray - which sits outside `card`'s own DOM subtree and would
-//     otherwise never fire card's mouseleave-based collapse timer, or
-//     worse, silently let it fire while the tray is still open - counts
-//     as "still hovering the tracker" exactly like Ian asked: "when this
-//     flips out... that now needs to register as true since the tracker
-//     size has expanded."
+// Rebuilt twice the same day. First version was a small vertical tab
+// rendered as a SIBLING of the whole card (needed to escape `card`'s own
+// `overflow: hidden`), mounted/unmounted via `{cardExpanded && ...}` with
+// its own separate spin-in animation. Ian, live: "skills tray is kind of
+// ugly. i dont want it to overlap anything on command space... maybe a
+// half circle that perfectly lines up with the top of the big mode bar
+// with the first orange line after weekly usage... it needs to expand
+// out when small goes to big mode and... needs to collapse at the same
+// time it CANNOT linger... it also needs to be completely legible this is
+// so small you cant read the text... think of it as an additional modular
+// component but essentially functions as and treated as part of big mode
+// that expands and collapses at the exact same time."
+//
+// That last line is the real design instruction, not just flavor text -
+// "part of big mode," not a bolted-on extra with its own timing. The
+// mount/unmount approach COULDN'T deliver that: React unmounting a node
+// has no collapse animation at all (instant gone - the "lingering" Ian
+// saw was this component's old DOM node still painted for a frame while
+// the card itself had already shrunk back to mini width, since the two
+// were never actually synchronized). Fixed at the structural level - see
+// `cardOuter`/`cardInner` above: the card split into an unstyled outer
+// wrapper (owns `is-expanded`, no overflow clipping) and an inner div that
+// kept all the old visual styling (background/clip-path/overflow/sweep).
+// SkillsTab is now a permanent CHILD of cardOuter, a sibling of cardInner
+// - always in the DOM, never conditionally mounted - so its own
+// opacity/transform transition is driven purely by the SAME `is-expanded`
+// class the rest of big mode reacts to (see skillsTabWrap's `.is-expanded
+// &` rule below), with the exact same easing/duration as `.expand`'s own
+// grid transition. One state change, one instant, both animate together -
+// there's no separate JS trigger left to desync.
+//
+// Other changes this round:
+//   - Pops out on the LEFT now (Ian: "the half circle is supposed to pop
+//     out on the left"), not the right - `skillsTabWrap`'s `left` offset
+//     mirrors the math the old right-side version used (flush, zero
+//     overlap into the card), and the bump's rounded corners flipped to
+//     the left side to match.
+//   - Bigger for real legibility (Ian: "this is so small you cant read
+//     the text") - 56px x 168px (still a true semicircle: width ==
+//     height/2) instead of the old 40x80, with the vertical label bumped
+//     to 11px and a little letter-spacing room to breathe.
+//   - Vertically positioned by real measurement via `positionSkillsTab`
+//     (unchanged mechanism, still tracks resetsSection's own bottom
+//     border - "the first orange line after weekly usage").
+//   - Hover OR click both open the flyout (`&:hover .flyout, &.is-open
+//     .flyout` share one rule; click toggles `.is-open` via
+//     `toggleSkillsTray`).
+//   - The flyout cascades straight down and anchors to the RIGHT edge of
+//     the handle (mirrored from the old left-side anchor for the
+//     right-hand version) - extends further left into open space, never
+//     back over the card.
 let skillsTrayOpen = false
 
 const toggleSkillsTray = (e) => {
@@ -1249,19 +1304,43 @@ const toggleSkillsTray = (e) => {
   if (wrapEl) wrapEl.classList.toggle("is-open", skillsTrayOpen)
 }
 
-// right: -40px (2026-08-04, real overlap bug found from Ian's own
-// screenshot): -40px == -(handle's own 40px width), which puts the
-// handle's flat LEFT edge exactly flush with card's right edge and the
-// whole bump poking outward from there - zero overlap into the card's own
-// content. An earlier -20px value split the bump half-in/half-out,
-// overlapping card's right-edge padding, which combined with the old
-// flyout opening sideways (`right: 100%`, since replaced - see
-// skillsFlyout below) was the actual "kind of ugly... don't want it to
-// overlap anything" Ian flagged.
+// left: -56px (2026-08-04) == -(handle's own 56px width) - puts the
+// handle's flat RIGHT edge exactly flush with cardInner's left edge and
+// the whole bump poking outward to the LEFT from there, zero overlap into
+// the card's own content, mirroring the flush-math the right-side version
+// used (see this block's own comment above for why it moved to this
+// side).
+//
+// Visibility is driven by the ancestor `.is-expanded` class (2026-08-04) -
+// `.is-expanded &` compiles (via stylis' standard nesting, same trick used
+// for `.detail`/`.nested` elsewhere) to "when an ancestor of this element
+// carries the literal class `is-expanded`, style THIS element" - since
+// `is-expanded` toggles on cardOuter (this wrap's own grandparent) and
+// never on the wrap directly, this is what makes the tray's own
+// enter/exit ride the exact same state change and transition timing as
+// `.expand` itself, instead of a separate mount-triggered animation.
+// Default (collapsed) state carries a 280ms exit delay - same number
+// `expandWrap` uses for its own collapse - so a brief mouse-out blip
+// doesn't yank the tray away instantly; the `.is-expanded &` override
+// zeroes that delay back out for entering, same asymmetric enter/exit
+// pattern used throughout this file.
 const skillsTabWrap = css`
   position: absolute;
-  right: -40px;
+  left: -56px;
   z-index: 5;
+  opacity: 0;
+  transform: scale(0.4) rotate(40deg);
+  pointer-events: none;
+  transform-origin: right center;
+  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1) 280ms,
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1) 280ms;
+
+  .is-expanded & {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
 
   &:hover .flyout,
   &.is-open .flyout {
@@ -1270,38 +1349,27 @@ const skillsTabWrap = css`
     opacity: 1;
     pointer-events: auto;
   }
-
-  @keyframes tabSpinOut {
-    from {
-      opacity: 0;
-      transform: scale(0.3) rotate(-60deg);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1) rotate(0deg);
-    }
-  }
 `
 
 // True half-circle (2026-08-04): width is exactly half of height, so the
-// two right-corner border-radius values (clamped to min(width, height/2) =
-// 40px either way) produce a real semicircle, not just a rounded rect -
-// flat edge flush against the card, round edge poking out to the right.
+// two LEFT-corner border-radius values (clamped to min(width, height/2) =
+// 56px either way) produce a real semicircle, not just a rounded rect -
+// flat edge flush against the card, round edge poking out to the left.
+// Sized up from the original 40x80 specifically for legibility (Ian: "this
+// is so small you cant read the text").
 const skillsTabHandle = css`
-  width: 40px;
-  height: 80px;
+  width: 56px;
+  height: 168px;
   background: ${NERV_BG};
   border: 1px solid ${NERV_LINE};
-  border-left: none;
-  border-radius: 0 999px 999px 0;
+  border-right: none;
+  border-radius: 999px 0 0 999px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
   cursor: pointer;
-  transform-origin: left center;
-  animation: tabSpinOut 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
   transition: background 0.2s ease, border-color 0.2s ease;
 
   &:hover {
@@ -1313,32 +1381,27 @@ const skillsTabHandle = css`
 const skillsTabLabel = css`
   writing-mode: vertical-rl;
   transform: rotate(180deg);
-  font-size: 8px;
-  letter-spacing: 0.12em;
+  font-size: 11px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: ${NERV_TEXT_DIM};
 `
 
 const skillsTabCount = css`
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   color: ${NERV_ORANGE};
 `
 
-// Cascades DOWN from the bump now (2026-08-04), not sideways toward the
-// card - same grid 0fr->1fr reveal language as every other expandable list
-// in this file (see `nestedList`/`detail`), triggered here via
-// skillsTabWrap's own `:hover .flyout, .is-open .flyout` rule above
-// instead of a plain opacity/transform toggle.
-// left: 0 (2026-08-04, not right: 0) - anchors the flyout's LEFT edge to
-// the handle's own left edge (which now sits flush with card's right edge,
-// see skillsTabWrap's own comment above), so the whole 260px panel extends
-// rightward into the open space beside the card instead of leftward back
-// OVER it - a real, literal instance of the overlap Ian flagged, not just
-// a style nitpick: the old `right: 100%` (sideways) and even a naive
-// `right: 0` here (downward but still anchored to the wrong edge) both put
-// most of this panel's width directly on top of Active/Daily Goals
-// content.
+// Cascades DOWN from the bump, same grid 0fr->1fr reveal language as
+// every other expandable list in this file (see `nestedList`/`detail`),
+// triggered via skillsTabWrap's own `:hover .flyout, .is-open .flyout`
+// rule above instead of a plain opacity/transform toggle.
+// right: 0 (2026-08-04, not left: 0 - mirrored from the right-side
+// version since the bump itself now lives on the opposite side) anchors
+// the flyout's RIGHT edge to the handle's own right edge (flush with
+// cardInner's own left edge), so the whole 260px panel extends further
+// LEFT into open space instead of back over the card's own content.
 const skillsFlyout = css`
   display: grid;
   grid-template-rows: 0fr;
@@ -1346,7 +1409,7 @@ const skillsFlyout = css`
   pointer-events: none;
   position: absolute;
   top: 100%;
-  left: 0;
+  right: 0;
   margin-top: 8px;
   width: 260px;
   transition: grid-template-rows 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
@@ -1449,11 +1512,23 @@ const SkillRow = ({ skill }) => (
 )
 
 // SkillsTab - see the css comment above (`skillsTabWrap`) for the full
-// design rationale, including why this renders as a sibling of `card`.
+// design rationale, including why this is now a permanent CHILD of
+// cardOuter (a sibling of cardInner) instead of a conditionally-mounted
+// sibling of the whole card.
 // `skills-tray-wrap` is a plain literal class (same "literal class
 // alongside Emotion's hash" trick used for `.detail`/`.nested` elsewhere)
 // so toggleSkillsTray's click handler can find its own root via
 // `closest()` without needing a ref of its own.
+// Explicit onMouseEnter/onMouseLeave still needed here (2026-08-04) even
+// though this is now a real DOM child of cardOuter - being DOM-nested
+// doesn't automatically make cardOuter's own mouseenter/mouseleave fire
+// when the pointer moves onto this element, since `position: absolute`
+// pulls it outside cardOuter's normal rendered box/hit region (native
+// mouseenter/mouseleave key off an element's actual geometry, not just
+// DOM parent-child structure). So this still directly calls
+// disarmCollapse/armCollapse on the captured `cardNode` - per Ian: "when
+// this flips out... that now needs to register as true since the tracker
+// size has expanded."
 const SkillsTab = ({ skills }) => {
   if (!skills || skills.length === 0) return null
   const usedCount = skills.filter((s) => s.call_count > 0).length
@@ -2241,14 +2316,20 @@ export const render = (state) => {
   } = state
 
   if (loading) {
-    return <div className={card}>loading...</div>
+    return (
+      <div className={cardOuter}>
+        <div className={cardInner}>loading...</div>
+      </div>
+    )
   }
 
   if (error) {
     return (
-      <div className={card}>
-        <div className={title}>Commandspace</div>
-        <div>couldn't read tracker: {error}</div>
+      <div className={cardOuter}>
+        <div className={cardInner}>
+          <div className={title}>Commandspace</div>
+          <div>couldn't read tracker: {error}</div>
+        </div>
       </div>
     )
   }
@@ -2256,24 +2337,23 @@ export const render = (state) => {
   const hasResets = (usage_resets && usage_resets.length > 0) || session_reset || personal_health
 
   return (
-    // Plain wrapper div (2026-08-04), not a JSX fragment shorthand -
-    // Übersicht's JSX transform errored on the fragment shorthand with
-    // "Can't find variable: React" (fragments desugar to React.Fragment, which needs a
-    // React global this environment doesn't inject; every other element
-    // here compiles to plain function calls that don't need one). An
-    // unstyled div is a no-op for layout/positioning purposes - it's
-    // `position: static`, so it doesn't become the nearest positioned
-    // ancestor for `SkillsTab`'s own `position: absolute` (that's still
-    // whatever Übersicht's outer widget container provides, unchanged from
-    // before this wrapper existed) - it's only here so `card` and
-    // `SkillsTab` can be siblings without a fragment.
-    <div>
+    // cardOuter is the real root now (2026-08-04) - no separate wrapper div
+    // needed to keep `card` and `SkillsTab` as fragment-free siblings
+    // anymore, since SkillsTab is a genuine CHILD of cardOuter now (a
+    // sibling of cardInner, not of the whole widget) - see cardOuter's own
+    // comment for why that split happened. `is-expanded` toggles here,
+    // same mechanism as always (`setExpanded`/`armCollapse`/
+    // `disarmCollapse`/`toggleExpanded`, all still targeting this exact
+    // element via the captured `cardNode` ref) - it just now also drives
+    // SkillsTab's own CSS transition as a side effect of living inside
+    // this same element, with zero extra JS.
     <div
-      className={cardExpanded ? `${card} is-expanded` : card}
+      className={cardExpanded ? `${cardOuter} is-expanded` : cardOuter}
       ref={(el) => { if (el) cardNode = el }}
       onMouseEnter={(e) => disarmCollapse(e.currentTarget)}
       onMouseLeave={(e) => armCollapse(e.currentTarget)}
     >
+      <div className={cardInner}>
       <div className={`${title} ${clickableCursor}`} onClick={toggleExpanded}>Commandspace</div>
 
       {/* 2026-07-31, per Ian: mini mode was inconsistent - Done showed "0"
@@ -2457,8 +2537,18 @@ export const render = (state) => {
           </div>
         </div>
       </div>
-    </div>
-    {cardExpanded && <SkillsTab skills={skills} />}
+      </div>
+      {/* SkillsTab always rendered now (2026-08-04), not gated by
+          `cardExpanded &&` - see its own comment for why: gating the
+          mount/unmount meant it popped in AFTER the card had already
+          opened (its own separate spin animation) and vanished instantly
+          with no collapse animation at all on the way out, which is what
+          read as "lingering"/desynced from the rest of big mode. It's
+          always in the DOM now; its own visibility is driven purely by
+          cardOuter's `is-expanded` class via CSS, so it opens and closes
+          in the exact same instant and over the exact same transition as
+          everything else in `.expand`. */}
+      <SkillsTab skills={skills} />
     </div>
   )
 }
