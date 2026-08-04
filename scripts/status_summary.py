@@ -991,6 +991,100 @@ def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int) -> di
     }
 
 
+SKILL_NAME_RE = re.compile(r"^name:\s*(.+)$", re.MULTILINE)
+SKILL_DESC_RE = re.compile(r"^description:\s*(.+)$", re.MULTILINE)
+SKILL_DESC_MAX_CHARS = 160
+
+
+def load_skills_catalog(claude_space: Path) -> list:
+    """Skills Tray data source (2026-08-04), per Ian: "i want to visualize
+    and keep track of how many skills we have created and get a visual
+    read out of how often they are getting run and brief descriptions of
+    what they do."
+
+    Two pieces, merged: (1) scans ClaudeSpace/*/SKILL.md for `name`/
+    `description` (YAML frontmatter, single-line values - matches every
+    real SKILL.md in this workspace today, no full YAML parser needed);
+    (2) reads config/../ClaudeSpace/skills-usage-log.json (written by
+    whichever skill just ran, per PROCESS.md's new Ground Rule - a
+    self-reported signal, same honest-proxy pattern as run-log.md/
+    relationship-log.md elsewhere in this workspace, not hard telemetry)
+    for call_count and how long ago each skill last ran.
+
+    Known limitation, flagged honestly rather than silently: this only
+    catalogs skills with a SKILL.md file physically present in
+    ClaudeSpace. A few real skills (incubator, skill-creator) are saved
+    directly to Cowork's own skill store with no local mirror here - no
+    local-file-reading script can see into that store, so they won't
+    appear unless/until a SKILL.md gets added for them too. Logged usage
+    for an unmirrored skill still surfaces (with an empty description)
+    rather than being silently dropped.
+
+    Sorted by call_count descending (most-used first), then name
+    ascending for ties - "how often they are getting run" is the primary
+    ask, so the busiest skills lead."""
+    catalog = {}
+    for skill_md in sorted(claude_space.glob("*/SKILL.md")):
+        try:
+            text = skill_md.read_text(errors="ignore")
+        except OSError:
+            continue
+        name_match = SKILL_NAME_RE.search(text)
+        if not name_match:
+            continue
+        name = name_match.group(1).strip()
+        desc_match = SKILL_DESC_RE.search(text)
+        description = desc_match.group(1).strip() if desc_match else ""
+        if len(description) > SKILL_DESC_MAX_CHARS:
+            description = description[:SKILL_DESC_MAX_CHARS].rsplit(" ", 1)[0] + "…"
+        catalog[name] = {
+            "name": name,
+            "description": description,
+            "call_count": 0,
+            "last_called_hours_ago": None,
+        }
+
+    usage_log_path = claude_space / "skills-usage-log.json"
+    if usage_log_path.exists():
+        try:
+            entries = json.loads(usage_log_path.read_text(errors="ignore"))
+        except (json.JSONDecodeError, OSError):
+            entries = []
+        if not isinstance(entries, list):
+            entries = []
+        now = datetime.now()
+        counts: dict = {}
+        latest_by_skill: dict = {}
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            skill = entry.get("skill")
+            at = entry.get("at")
+            if not skill or not at:
+                continue
+            counts[skill] = counts.get(skill, 0) + 1
+            try:
+                at_dt = datetime.fromisoformat(at)
+            except ValueError:
+                continue
+            if skill not in latest_by_skill or at_dt > latest_by_skill[skill]:
+                latest_by_skill[skill] = at_dt
+        for skill, count in counts.items():
+            if skill not in catalog:
+                catalog[skill] = {
+                    "name": skill,
+                    "description": "",
+                    "call_count": 0,
+                    "last_called_hours_ago": None,
+                }
+            catalog[skill]["call_count"] = count
+            last = latest_by_skill.get(skill)
+            if last:
+                catalog[skill]["last_called_hours_ago"] = round((now - last).total_seconds() / 3600, 1)
+
+    return sorted(catalog.values(), key=lambda s: (-s["call_count"], s["name"]))
+
+
 def build_summary(claude_space: Path, script_dir: Path) -> dict:
     index_path = claude_space / "INDEX.md"
     needs_ian_path = claude_space / "NEEDS-IAN.md"
@@ -1054,6 +1148,7 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
         "personal_health": load_personal_health(personal_health_config_path, now),
         "sections": sections,
         "needs_attention": parse_needs_ian_items(needs_ian_text),
+        "skills": load_skills_catalog(claude_space),
     }
 
 

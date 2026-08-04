@@ -1125,6 +1125,203 @@ const groupNestedIndent = css`
   padding-left: 10px;
 `
 
+// Skills Tray (2026-08-04), per Ian: "i want to visualize and keep track
+// of how many skills we have created and get a visual read out of how
+// often they are getting run and brief descriptions of what they do...
+// maybe when command space goes big mode, a side piece flips open like
+// swiss army knife called skills tray." A small vertical tab fixed to the
+// card's right edge, visible only in big mode (see render()'s own
+// `cardExpanded &&` guard); hovering it flips out a panel listing every
+// skill from status_summary.py's `load_skills_catalog`, sorted by call
+// count, each with a "last used" caption and a hover-expandable brief
+// description - same `detail`/hover-reveal language as every other row in
+// this file.
+//
+// Rendered as a SIBLING of `card` in render(), not a child - `card` has
+// its own `overflow: hidden` (needed for the ambient sweep animation and
+// its clipped-corner shape), which would clip a panel meant to visually
+// escape the card's own bounding box. Both `card` and this end up as
+// direct children of Übersicht's own outer widget container (see this
+// file's `className` export), so `position: absolute` here sizes/
+// positions relative to that same shared box - `right: -27px` reliably
+// lands just past the card's own right edge regardless of card's internal
+// layout, and the flyout opens back toward the card (`right: 100%`)
+// rather than further off toward the screen's own right edge, since the
+// widget already sits close to it (`right: 40px` in `className`).
+const skillsTabWrap = css`
+  position: absolute;
+  top: 60px;
+  right: -27px;
+  z-index: 5;
+
+  &:hover .flyout {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+  }
+`
+
+const skillsTabHandle = css`
+  width: 26px;
+  padding: 10px 4px;
+  background: ${NERV_BG};
+  border: 1px solid ${NERV_LINE};
+  border-left: none;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), 50% 100%, 0 calc(100% - 10px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 107, 26, 0.1);
+    border-color: ${NERV_ORANGE};
+  }
+`
+
+const skillsTabLabel = css`
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: ${NERV_TEXT_DIM};
+`
+
+const skillsTabCount = css`
+  font-size: 10px;
+  font-weight: 700;
+  color: ${NERV_ORANGE};
+`
+
+const skillsFlyout = css`
+  position: absolute;
+  top: 0;
+  right: 100%;
+  margin-right: 6px;
+  width: 260px;
+  max-height: 480px;
+  overflow-y: auto;
+  background: ${NERV_BG};
+  border: 1px solid ${NERV_LINE};
+  padding: 10px;
+  box-shadow: 0 4px 28px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+
+  &::-webkit-scrollbar {
+    width: 5px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: ${NERV_LINE};
+    border-radius: 2px;
+  }
+`
+
+const skillsFlyoutHeader = css`
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: ${NERV_ORANGE};
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid ${NERV_LINE};
+`
+
+const skillRow = css`
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: ${NERV_TEXT_DIM};
+  padding: 4px 4px;
+  border-left: 2px solid transparent;
+  transition: background 0.2s ease, border-color 0.2s ease;
+
+  &:hover {
+    background: color-mix(in srgb, ${STATUS_TEAL} 14%, transparent);
+    border-left: 2px solid ${STATUS_TEAL};
+  }
+  &:hover .detail {
+    transition-delay: 260ms;
+    grid-template-rows: 1fr;
+    opacity: 1;
+    pointer-events: auto;
+    margin-top: 4px;
+  }
+`
+
+const skillRowTop = css`
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+`
+
+const skillRowName = css`
+  color: ${NERV_TEXT};
+  font-weight: 600;
+`
+
+const skillRowMeta = css`
+  font-size: 9px;
+  color: ${NERV_TEXT_DIM};
+  white-space: nowrap;
+  flex-shrink: 0;
+`
+
+const formatSkillLastUsed = (hoursAgo) => {
+  if (hoursAgo == null) return "never run"
+  if (hoursAgo < 1) return "used <1h ago"
+  if (hoursAgo < 24) return `used ${Math.round(hoursAgo)}h ago`
+  return `used ${Math.round(hoursAgo / 24)}d ago`
+}
+
+const SkillRow = ({ skill }) => (
+  <div className={skillRow}>
+    <div className={skillRowTop}>
+      <span className={skillRowName}>{skill.name}</span>
+      <span className={skillRowMeta}>
+        {skill.call_count > 0 ? `${skill.call_count}× · ` : ""}
+        {formatSkillLastUsed(skill.last_called_hours_ago)}
+      </span>
+    </div>
+    {skill.description && (
+      <div className={`detail ${detail}`} style={{ borderLeftColor: STATUS_TEAL }}>
+        <div className={detailInner}>{skill.description}</div>
+      </div>
+    )}
+  </div>
+)
+
+// SkillsTab - see the css comment above (`skillsTabWrap`) for the full
+// design rationale, including why this renders as a sibling of `card`.
+const SkillsTab = ({ skills }) => {
+  if (!skills || skills.length === 0) return null
+  const usedCount = skills.filter((s) => s.call_count > 0).length
+  return (
+    <div className={skillsTabWrap}>
+      <div className={skillsTabHandle}>
+        <span className={skillsTabCount}>{skills.length}</span>
+        <span className={skillsTabLabel}>SKILLS</span>
+      </div>
+      <div className={`flyout ${skillsFlyout}`}>
+        <div className={skillsFlyoutHeader}>
+          {skills.length} skills · {usedCount} used
+        </div>
+        {skills.map((s) => (
+          <SkillRow key={s.name} skill={s} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // 2026-07-31: Ian - "seeing everything expanded at once is a little
 // jarring" - the summary line gets a slight bold/brightness lift so the eye
 // has one clear thing to land on first when a detail panel opens, rather
@@ -1873,6 +2070,7 @@ export const render = (state) => {
     sections,
     needs_attention,
     daily_goal,
+    skills,
   } = state
 
   if (loading) {
@@ -1891,6 +2089,7 @@ export const render = (state) => {
   const hasResets = (usage_resets && usage_resets.length > 0) || session_reset || personal_health
 
   return (
+    <>
     <div className={cardExpanded ? `${card} is-expanded` : card}>
       <div className={`${title} ${clickableCursor}`} onClick={toggleExpanded}>Commandspace</div>
 
@@ -2076,5 +2275,7 @@ export const render = (state) => {
         </div>
       </div>
     </div>
+    {cardExpanded && <SkillsTab skills={skills} />}
+    </>
   )
 }
