@@ -284,6 +284,31 @@ const IconBacklog = ({ size = 12 }) => (
   </svg>
 )
 
+// Bin (2026-08-04, per Ian: "another section i want for the project tracker
+// is a bin/trash to discard ideas we don't wanna do anymore and keep track
+// of stuff that way"). A plain trash-can outline - the one icon in this set
+// that's fine being literal/unambiguous rather than abstract, since "bin"
+// is exactly the right mental model here (discarded but not deleted - see
+// _bin/BIN.md's own convention doc). Dim/muted color (NERV_TEXT_DIM, same
+// as IconDormant) rather than a red/alarm tone - being in the bin isn't an
+// urgent or negative state, just an inactive one, same reasoning as
+// Dormant's own muted treatment.
+const IconBin = ({ size = 12 }) => (
+  <svg width={size} height={size} viewBox="0 0 12 12" style={iconStyle}>
+    <path
+      d="M2.5 3.5H9.5L8.9 10.2C8.87 10.5 8.6 10.7 8.3 10.7H3.7C3.4 10.7 3.13 10.5 3.1 10.2L2.5 3.5Z"
+      stroke={NERV_TEXT_DIM}
+      strokeWidth="1"
+      strokeLinejoin="round"
+      fill="none"
+    />
+    <line x1="1.5" y1="3.5" x2="10.5" y2="3.5" stroke={NERV_TEXT_DIM} strokeWidth="1.1" strokeLinecap="round" />
+    <line x1="4.5" y1="3.5" x2="4.8" y2="1.8" stroke={NERV_TEXT_DIM} strokeWidth="1" strokeLinecap="round" />
+    <line x1="7.5" y1="3.5" x2="7.2" y2="1.8" stroke={NERV_TEXT_DIM} strokeWidth="1" strokeLinecap="round" />
+    <line x1="4.8" y1="1.8" x2="7.2" y2="1.8" stroke={NERV_TEXT_DIM} strokeWidth="1" strokeLinecap="round" />
+  </svg>
+)
+
 // IconHeartbeat (2026-07-31, per Ian: "a little cool icon for brain or
 // health or a little body outline" on the new personal-health gauge). Went
 // with an EKG/pulse line over a brain or body outline - both of those need
@@ -1110,6 +1135,10 @@ const SECTION_META = {
   // (2026-07-31, per Ian: wanted this listed as a subheader alongside the
   // real statuses, not buried as plain text inside Needs Attention).
   dormant: { Icon: IconDormant, label: "Dormant", color: NERV_TEXT_DIM },
+  // Also not a real INDEX.md status (2026-08-04) - reads from _bin/BIN.md
+  // instead (see status_summary.py's load_bin_items). Discarded projects/
+  // ideas, kept visible so "discard" doesn't mean "vanish with no record."
+  bin: { Icon: IconBin, label: "Bin", color: NERV_TEXT_DIM },
 }
 
 const formatHoursAgo = (hoursAgo) => {
@@ -1697,6 +1726,12 @@ export const render = (state) => {
         {sections && sections.dormant && sections.dormant.total > 0 && (
           <span className={tinyStatWarn}><IconDormant /> <strong>{sections.dormant.total}</strong></span>
         )}
+        {/* Bin pill (2026-08-04) - plain tinyStat, not tinyStatWarn: being in
+            the bin isn't a warning state the way Dormant/Needs Attention are,
+            just an inactive one (same reasoning as IconBin's own color). */}
+        {sections && sections.bin && sections.bin.total > 0 && (
+          <span className={tinyStat}><IconBin /> <strong>{sections.bin.total}</strong></span>
+        )}
       </div>
 
       <div className={`expand ${expandWrap}`}>
@@ -1785,6 +1820,7 @@ export const render = (state) => {
               recentCount={totals.done_recent}
             />
             <Section statusKey="dormant" section={sections && sections.dormant} collapsible />
+            <Section statusKey="bin" section={sections && sections.bin} collapsible />
           </div>
 
           <div className={sectionsWrap}>

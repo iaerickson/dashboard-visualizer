@@ -323,6 +323,61 @@ def collect_stale_projects(sections: dict) -> list[dict]:
     return stale
 
 
+BIN_ENTRY_RE = re.compile(
+    r"^-\s+\*\*(\d{4}-\d{2}-\d{2})\*\*\s+—\s+`([^`]+)`\s+\(was\s+([^)]+)\)(?:\s+—\s+(.*))?$"
+)
+
+
+def load_bin_items(claude_space: Path) -> list[dict]:
+    """Reads _bin/BIN.md's dated entries (see that file's own "Convention"
+    section for the exact line format) - the bin/trash Ian asked for
+    (2026-08-04): "a bin/trash to discard ideas we don't wanna do anymore
+    and keep track of stuff that way," physically confirmed as "move to a
+    bin folder" rather than a status flag. Real project folders actually
+    live at _bin/<name>/ (this function doesn't need to touch them - BIN.md
+    is the one source of truth for display, same "trust the log, not a
+    directory listing" choice most-recently-touched-project style signals
+    in this file already make); bare idea one-liners never had a folder to
+    move, so they're logged here directly instead.
+
+    Returns items shaped exactly like build_sections' own project items
+    (name/summary/hours_ago/last_completed/next_steps/stale) so the widget
+    can render this as a normal Section/ProjectRow with zero new component
+    code - "stale" is always False here (dormant-tagging something already
+    in the bin doesn't mean anything), last_completed/next_steps are always
+    empty (nothing left to act on), summary carries the discard reason."""
+    bin_md = claude_space / "_bin" / "BIN.md"
+    if not bin_md.exists():
+        return []
+    items = []
+    for line in bin_md.read_text(errors="ignore").splitlines():
+        m = BIN_ENTRY_RE.match(line.strip())
+        if not m:
+            continue
+        date_str, name, former_path, reason = m.groups()
+        try:
+            discarded_at = datetime.strptime(date_str, "%Y-%m-%d")
+            hours_ago = (datetime.now() - discarded_at).total_seconds() / 3600
+        except ValueError:
+            hours_ago = None
+        summary = reason.strip() if reason else f"was {former_path.strip()}"
+        items.append(
+            {
+                "name": name,
+                "summary": summary[:140],
+                "last_completed": None,
+                "next_steps": [],
+                "stale": False,
+                "hours_ago": round(hours_ago, 1) if hours_ago is not None else None,
+                "time_estimate": None,
+            }
+        )
+    # Newest discard first - matches Active/Paused/Done's own "most recent
+    # first" convention (see build_sections' own sort comment).
+    items.sort(key=lambda i: (i["hours_ago"] is None, i["hours_ago"] or 0))
+    return items
+
+
 def resolve_project_readme(claude_space: Path, project: dict) -> Path | None:
     """Follows an INDEX.md link (./name/ or ../Projects/name/) to a real README.md,
     if this project has a folder at all (idea-stage one-liners usually don't)."""
@@ -866,6 +921,13 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
     # existing Section/ProjectRow rendering with no special-casing.
     dormant_items = collect_stale_projects(sections)
     sections["dormant"] = {"total": len(dormant_items), "shown": dormant_items}
+
+    # "Bin" is a synthetic section too (2026-08-04), same pattern as Dormant
+    # above - reads from _bin/BIN.md rather than INDEX.md/build_sections,
+    # but shaped identically so the widget's existing Section/ProjectRow
+    # handles it with zero new rendering code.
+    bin_items = load_bin_items(claude_space)
+    sections["bin"] = {"total": len(bin_items), "shown": bin_items}
 
     totals = count_statuses(index_text)
     # done_recent (2026-07-31): how many Done items were marked done within the
