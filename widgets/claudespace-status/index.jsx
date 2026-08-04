@@ -780,9 +780,13 @@ const staleTag = css`
 // exactly overlapping projectItem's row-level border into ONE continuous
 // line from the top of the hovered row down through the whole expanded
 // panel; padding-left originally 8px (matching detailInner's own padding,
-// to keep content position visually unchanged after the margin shift) - see
-// stepSvg's own comment below for why that got reduced to 2px in a later
-// pass (a real clipping bug found live, not a style tweak).
+// to keep content position visually unchanged after the margin shift), then
+// reduced to 2px in a later pass to fix a real overflow-clipping bug found
+// live (not a style tweak) - the connector geometry that padding value was
+// originally tuned for is gone now (see the Next-steps rows comment below,
+// 2026-08-04 - the whole connector/tracking-dot mechanism was removed), but
+// the padding value itself stays, it's load-bearing for this border's own
+// alignment independent of that.
 // Same exit-delay treatment as nestedList (2026-07-31, preventative - see
 // nestedList's own comment for the live bug this addresses at the section
 // level; this is the same reveal mechanism one level down, for individual
@@ -1002,72 +1006,20 @@ const clickableCursor = css`
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 `
 
-// Git-flow-style next-steps rows (2026-07-31, per Ian: "a little bar with
-// rounded ends to each task sort of like git branch git flow visualizations,"
-// then a same-day follow-up: "can they connect to the outer bar here?" - the
-// outer bar being `detail`'s own border-left accent, which now runs
-// continuously the full height of the expanded panel (see `detail`'s own
-// comment for the row-vs-panel border fix). Four straight rounds of static
-// CSS-border geometry (ticks, then a border-radius "arc" box) kept reading
-// as flat/disconnected no matter how carefully the offsets were tuned - a
-// wide, short border-radius box only actually curves for the few pixels
-// nearest its own corner, so at this shape it was always going to look like
-// a flat line with a barely-visible kink, not a real branch curve. Ian's
-// screenshot confirmed it: "still looks bad."
-//
-// Fifth pass (2026-07-31): each row's own hand-drawn SVG `<path>` (curve for
-// its first ~16px easing from vertical into horizontal, then a flat run)
-// replaced the border-radius "arc" box - `pathLength="100"` (SVG's
-// normalized-length attribute, remaps stroke-dasharray/dashoffset to that
-// number regardless of the path's real geometric length) makes the
-// "draws itself" reveal a plain CSS `stroke-dashoffset` transition, no
-// manual path-length math.
-//
-// Sixth pass (2026-07-31), per Ian's live look: "the line needs to grow and
-// connect from the main base line on the left... they need to connect" and
-// "the dot also appears just a little too slow." Two real fixes:
-// (a) the path started at x=2 (2px shy of the trunk, `detail`'s own
-// border-left at inset 0) - visible gap. Now starts at exactly x=0, flush
-// against the trunk.
-// (b) durations cut roughly by a third across the board (path draw
-// 0.45s→0.3s, bubble delay 0.4s→0.22s) - felt sluggish at the old timing.
-//
-// Also per the same message, a bigger change: "if there is an expanded
-// child the dot follows the vertical position of the mouse... with slight
-// delay... juts out and lands... pointing to an item if it's clickable and
-// actionable, otherwise it just stays on the line and follows." That's a
-// different mechanic than "reveal on hover, remember until the next hover" -
-// it's continuous cursor tracking, not discrete per-row state - so the old
-// `activateStep`/`.is-active`/sticky-memory approach (imperative classList,
-// needed because plain CSS :hover has no memory across a mouseleave) is
-// gone. In its place: ONE shared tracking dot per steps list (not one per
-// row), position driven by a single `onMouseMove` on `stepsWrap` -
-// `trackSteps` below finds the nearest row to the cursor's Y position, and
-// either "docks" the dot against that row (within `DOCK_THRESHOLD_PX`,
-// jutting right to sit next to the actionable text, per Ian's "lands and
-// points to an item") or leaves it free-floating on the trunk line at the
-// raw cursor Y (per "otherwise it just stays on the line and follows"). CSS
-// transitions on `top`/`left`/`transform` (not JS-driven animation) give the
-// "slight delay" and the bouncy landing "bloop" - the JS only ever sets a
-// target position, the easing itself is free from the browser. Each row's
-// own curve still reveals via plain CSS `:hover` (dropped the old JS
-// classList indirection now that nothing needs cross-mouseleave memory
-// anymore) - "the side lines always arc in a little" per row stays real,
-// layered underneath the new tracking dot rather than replaced by it.
-//
-// NOT built this round, on purpose - see NEEDS-IAN.md: the much bigger
-// structural ask in the same message (project rows expanding into
-// hoverable "subsub headers" - Summary/Last Completed/Next Steps/Time
-// Estimate as their own nested, arc-connected hover targets, same tracking-
-// dot behavior at every nesting level, non-actionable subheaders just
-// having the dot glide past without docking). That's a real redesign of
-// how the whole detail panel nests, not a tweak to this one already-built
-// piece - logged in detail rather than guessed at blind.
-const DOCK_THRESHOLD_PX = 12
-
+// Next-steps rows (2026-08-04, simplified). History: this went through six
+// rounds of a git-flow-style connector - static border ticks, a border-
+// radius "arc" box, a hand-drawn SVG path that drew itself on hover, then a
+// single cursor-tracking dot that followed the mouse and "docked" onto the
+// nearest row. Ian's call after living with it: "remove the moving ball/
+// line/gitflow arc aesthetic thing, it just isn't working." Pulled the
+// whole connector/tracking-dot mechanism out rather than tuning it a
+// seventh time - plain rows, full-bleed hover tint (the "highlight the
+// whole bar like a dropdown menu" read Ian liked much earlier), still
+// click-to-copy a continue-work prompt. Nothing about the click behavior
+// changed, only the connector visuals are gone.
 const stepsWrap = css`
-  position: relative;
-  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
 `
 
 const stepRow = css`
@@ -1076,21 +1028,9 @@ const stepRow = css`
   padding: 2px 9999px;
   cursor: pointer;
   transition: background 0.2s ease;
-
-  & .step-path {
-    fill: none;
-    stroke-width: 1.5px;
-    stroke-dasharray: 100;
-    stroke-dashoffset: 100;
-    transition: stroke-dashoffset 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  &:hover .step-path {
-    stroke-dashoffset: 0;
-  }
 `
 
 const stepRowInner = css`
-  position: relative;
   display: flex;
   align-items: center;
   min-height: 20px;
@@ -1101,93 +1041,6 @@ const stepRowTint = (color) => css`
     background: color-mix(in srgb, ${color} 14%, transparent);
   }
 `
-
-// Real root cause, found live (2026-07-31, per Ian: "still disconnected from
-// the main bar here") - not another guessed offset. `detailInner` has
-// `overflow: hidden` (needed for the collapse animation - see its own
-// comment). Overflow clips at an element's own PADDING-BOX edge, i.e.
-// detailInner's own box start: detail's border(2) + detail's padding-left.
-// At the old padding-left (8px), that edge sat at inset 10 - so the first
-// 10px of this SVG's intended -38px reach (everything from the true trunk at
-// inset 0 up to inset 10) was being silently clipped away before it ever
-// painted, leaving only the LATER part of the path visible - exactly the
-// "short line near the text, not touching the trunk" Ian kept seeing. Fixed
-// at the source: `detail`'s own padding-left dropped from 8px to 2px (see
-// `detail`'s own comment), shrinking that unavoidable clipped sliver from
-// 10px down to 4px - small enough to read as touching. `left` here updated
-// to match the new, shorter total reach (detail content 4 + detailInner
-// padding 8 + stepsWrap padding 20 = 32, not 38).
-const stepSvg = css`
-  position: absolute;
-  left: -32px;
-  top: 0;
-  pointer-events: none;
-  overflow: visible;
-`
-
-// Single tracking dot, shared by the whole steps list (2026-07-31) -
-// see the big comment above for why this replaced the old per-row bubble.
-// Position (top/left) is set directly via style in `trackSteps`/`untrackSteps`
-// below, not through React re-render - continuous mousemove-driven updates
-// go straight to the DOM for the same reason `.copied-flash` does elsewhere
-// in this file (cheap, immediate, no need to round-trip through Übersicht's
-// own state model for a purely cosmetic pointer). The CSS transitions here
-// are the entire "slight delay" and "bloop" landing feel - `top` eases
-// gently (tracking the cursor), `left`/`transform` use a bouncy overshoot
-// curve (the landing "bloop") only when actually docking onto a row.
-const stepTrackerDot = css`
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 6px;
-  height: 6px;
-  margin-left: -3px;
-  margin-top: -3px;
-  border-radius: 50%;
-  opacity: 0;
-  transform: scale(0.7);
-  pointer-events: none;
-  transition: top 0.18s ease-out, left 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 0.2s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-`
-
-// trackSteps (2026-07-31) - see stepsWrap's own comment for the full design.
-// Finds the nearest step row to the cursor's Y position (via each row's own
-// `offsetTop`, cheap and reliable since `stepRow`'s full-bleed trick only
-// touches horizontal margin/padding, never vertical layout) and either docks
-// the shared dot against it (jutting right, "pointing to an item... if it's
-// clickable and actionable") or leaves it free-floating on the trunk line
-// at the raw cursor position ("otherwise it just stays on the line and
-// follows").
-const trackSteps = (e) => {
-  const wrap = e.currentTarget
-  const dot = wrap.querySelector(".step-tracker-dot")
-  if (!dot) return
-  const rect = wrap.getBoundingClientRect()
-  const mouseY = e.clientY - rect.top
-  const rows = wrap.querySelectorAll(".step-row")
-  let nearestDist = Infinity
-  let nearestCenter = mouseY
-  rows.forEach((row) => {
-    const center = row.offsetTop + row.offsetHeight / 2
-    const dist = Math.abs(mouseY - center)
-    if (dist < nearestDist) {
-      nearestDist = dist
-      nearestCenter = center
-    }
-  })
-  const docked = nearestDist < DOCK_THRESHOLD_PX
-  const y = docked ? nearestCenter : Math.max(0, Math.min(mouseY, wrap.scrollHeight))
-  dot.style.top = `${y}px`
-  dot.style.left = docked ? "16px" : "0px"
-  dot.style.opacity = "1"
-  dot.style.transform = docked ? "scale(1)" : "scale(0.7)"
-}
-
-const untrackSteps = (e) => {
-  const dot = e.currentTarget.querySelector(".step-tracker-dot")
-  if (dot) dot.style.opacity = "0"
-}
 
 const detailLabel = css`
   color: ${NERV_ORANGE};
@@ -1529,12 +1382,7 @@ const ProjectRow = ({ item, isIdea, isPaused, color }) => {
           )}
           {item.next_steps && item.next_steps.length > 0 && (
             <SubField label="Next steps">
-              <div
-                className={`steps-wrap ${stepsWrap}`}
-                onMouseMove={trackSteps}
-                onMouseLeave={untrackSteps}
-              >
-                <div className={`step-tracker-dot ${stepTrackerDot}`} style={{ background: color || NERV_ORANGE }} />
+              <div className={`steps-wrap ${stepsWrap}`}>
                 {item.next_steps.map((step, i) => (
                   <div
                     className={`step-row ${stepRow} ${stepRowTint(color || NERV_ORANGE)}`}
@@ -1552,9 +1400,6 @@ const ProjectRow = ({ item, isIdea, isPaused, color }) => {
                     }}
                   >
                     <div className={stepRowInner}>
-                      <svg className={stepSvg} width="28" height="20" viewBox="0 0 28 20">
-                        <path className="step-path" d="M0 0 C0 7, 6 10, 14 10 L26 10" stroke={color || NERV_ORANGE} />
-                      </svg>
                       <span>{step}</span>
                     </div>
                   </div>
