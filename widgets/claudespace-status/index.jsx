@@ -1257,62 +1257,73 @@ const toggleSkillsTray = (e) => {
   if (wrapEl) wrapEl.classList.toggle("is-open", skillsTrayOpen)
 }
 
-// left: -56px (2026-08-04) == -(handle's own 56px width) - puts the
-// handle's flat RIGHT edge exactly flush with cardInner's left edge and
-// the whole bump poking outward to the LEFT from there, zero overlap into
-// the card's own content, mirroring the flush-math the right-side version
-// used (see this block's own comment above for why it moved to this
-// side).
+// Rebuilt a third time (2026-08-04) - per Ian, seeing the two-piece
+// version live: "so much better!! almost there when highlighted the line
+// looks like it goes just a hair above. Also the drop down menu... this
+// simply will not do. it needs to be cohesive. the have circle should
+// poke out more and the drop down falls directly underneath and in line
+// with the pop out circle... it cant just jumble bump out it needs to
+// fluid and connected and look good and be intuitive... these were
+// jumbled it doesnt match any of that." He also asked for the design term
+// for this - the closest established one is Material Design's
+// "container transform": a compact affordance expands IN PLACE into the
+// larger surface it reveals, sharing an edge/anchor the whole time,
+// instead of a separate popover appearing disconnected elsewhere. That's
+// what this is now, structurally, not just visually: ONE element, not a
+// circular handle plus a separately-positioned flyout box glued together
+// after the fact.
 //
-// top: 0 (2026-08-04, real placement fix, replacing the old
-// ResizeObserver/positionSkillsTab measurement entirely) - per Ian, after
-// seeing the measured-position version live: "size is correct but
-// placement is not correct... needs to be moved up so that the upper
-// boundary/top most part of half circle aligns with upper boundary/top
-// most part of the big mode." The earlier version anchored to
-// resetsSection's own bottom border, chasing a literal reading of "the
-// first orange line after weekly usage" from the original request - what
-// Ian actually wants is simpler and exact: flush with cardInner's own top
-// edge, same y-coordinate as the very top of the card itself. `top: 0`
-// on cardOuter's own coordinate system does this directly and precisely -
-// no measurement, no ResizeObserver, no race with the expand transition,
-// nothing left to get subtly wrong. `resetsSectionNode`/`positionSkillsTab`
-// are gone; this wrap no longer needs a ref at all.
+// The old two-piece version's real bug: the circle was anchored flush to
+// the card (`right: 0` on the flyout, matching the handle's own flush
+// edge), but the FLYOUT's opposite edge extended much further left than
+// the circle's own left edge - so below the circle, the shape suddenly
+// got wider only on the far side, with no shared boundary connecting the
+// two pieces. Fixed by merging them into `skillsTrayBox`, a single
+// element whose `width` AND `left` transition TOGETHER in lockstep
+// (`left` always equals `-width`, in both the collapsed and open rules
+// below) - the box's RIGHT edge (the one flush against the card) never
+// moves, growing only extends the LEFT edge further out. One shape, one
+// fixed anchor point, grows in place - literally a container transform.
 //
-// Entrance: "flip out seemingly from behind rotation style... the
-// animation can go above that spot but the end static position cannot."
-// `transform-origin: top right` pivots the bump at the exact corner where
-// it meets the card's own top-left - rotating from `rotate(-90deg)`
-// (folded flat upward, tucked behind/above the card) down to
-// `rotate(0deg)` sweeps it into place from ABOVE its resting spot, never
-// below, and lands EXACTLY on the `top: 0` resting position Ian called
-// out as non-negotiable - the overshoot lives entirely in the animation
-// path, never in the settled state.
+// top: 1px (2026-08-04, tuning the earlier `top: 0` fix) - per Ian: "when
+// highlighted the line looks like it goes just a hair above [the card's
+// own top edge]." A large border-radius curve tangent to a sharp square
+// corner right beside it (cardInner's own top-left) is a known optical
+// illusion - the curve reads as sitting slightly proud of a perfectly
+// aligned flat edge even when the underlying coordinates match exactly.
+// A 1px nudge down corrects for it.
 //
-// Visibility is driven by the ancestor `.is-expanded` class (2026-08-04) -
-// `.is-expanded &` compiles (via stylis' standard nesting, same trick used
-// for `.detail`/`.nested` elsewhere) to "when an ancestor of this element
-// carries the literal class `is-expanded`, style THIS element" - since
-// `is-expanded` toggles on cardOuter (this wrap's own grandparent) and
-// never on the wrap directly, this is what makes the tray's own
-// enter/exit ride the exact same state change and transition timing as
-// `.expand` itself, instead of a separate mount-triggered animation.
-// Default (collapsed) state carries a 280ms exit delay - same number
-// `expandWrap` uses for its own collapse - so a brief mouse-out blip
-// doesn't yank the tray away instantly; the `.is-expanded &` override
-// zeroes that delay back out for entering, same asymmetric enter/exit
-// pattern used throughout this file.
-const skillsTabWrap = css`
+// Entrance unchanged in spirit ("flip out seemingly from behind rotation
+// style... can go above that spot but the end static position cannot") -
+// `transform-origin: top right` pivots at the fixed corner, rotating from
+// folded-up (`rotate(-90deg)`) down to resting (`rotate(0deg)`).
+// Visibility still driven by the ancestor `.is-expanded` class (`.is-expanded
+// &`, same stylis ancestor-nesting trick as `.detail`/`.nested` elsewhere)
+// so the tray's enter/exit rides the exact same state change and timing
+// as the rest of big mode - unchanged from the previous round, see that
+// history for the full reasoning.
+const skillsTrayBox = css`
   position: absolute;
-  top: 0;
-  left: -56px;
+  top: 1px;
+  left: -84px;
   z-index: 5;
+  width: 84px;
+  display: flex;
+  flex-direction: column;
+  background: ${NERV_BG};
+  border: 1px solid ${NERV_LINE};
+  border-right: none;
+  border-radius: 999px 0 0 999px;
+  overflow: hidden;
+  cursor: pointer;
   opacity: 0;
   transform: rotate(-90deg);
   pointer-events: none;
   transform-origin: top right;
   transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1) 280ms,
-    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1) 280ms;
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1) 280ms, width 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    left 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-radius 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    background 0.25s ease, border-color 0.25s ease;
 
   .is-expanded & {
     opacity: 1;
@@ -1321,8 +1332,21 @@ const skillsTabWrap = css`
     transition-delay: 0s;
   }
 
-  &:hover .flyout,
-  &.is-open .flyout {
+  /* Grow IN PLACE (2026-08-04) - width and left change together, right
+     edge stays put. This is the whole fix: one shared anchor, one
+     continuous shape, instead of two pieces with independent positioning
+     math that could (and did) drift apart. */
+  &:hover,
+  &.is-open {
+    width: 260px;
+    left: -260px;
+    border-radius: 10px 0 0 10px;
+    background: rgba(255, 107, 26, 0.05);
+    border-color: ${NERV_ORANGE};
+  }
+
+  &:hover .tray-list,
+  &.is-open .tray-list {
     transition-delay: 120ms;
     grid-template-rows: 1fr;
     opacity: 1;
@@ -1330,31 +1354,19 @@ const skillsTabWrap = css`
   }
 `
 
-// True half-circle (2026-08-04): width is exactly half of height, so the
-// two LEFT-corner border-radius values (clamped to min(width, height/2) =
-// 56px either way) produce a real semicircle, not just a rounded rect -
-// flat edge flush against the card, round edge poking out to the left.
-// Sized up from the original 40x80 specifically for legibility (Ian: "this
-// is so small you cant read the text").
-const skillsTabHandle = css`
-  width: 56px;
+// Fixed-height header zone (2026-08-04) - always the same 168px tall
+// region at the top of `skillsTrayBox`, holding the count + vertical
+// label, whether the box is 84px (collapsed) or 260px (open) wide. Part
+// of the SAME box now, not a separate handle element - see
+// `skillsTrayBox`'s own comment.
+const skillsTrayHandleZone = css`
+  flex-shrink: 0;
   height: 168px;
-  background: ${NERV_BG};
-  border: 1px solid ${NERV_LINE};
-  border-right: none;
-  border-radius: 999px 0 0 999px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
-
-  &:hover {
-    background: rgba(255, 107, 26, 0.1);
-    border-color: ${NERV_ORANGE};
-  }
 `
 
 const skillsTabLabel = css`
@@ -1372,37 +1384,28 @@ const skillsTabCount = css`
   color: ${NERV_ORANGE};
 `
 
-// Cascades DOWN from the bump, same grid 0fr->1fr reveal language as
-// every other expandable list in this file (see `nestedList`/`detail`),
-// triggered via skillsTabWrap's own `:hover .flyout, .is-open .flyout`
-// rule above instead of a plain opacity/transform toggle.
-// right: 0 (2026-08-04, not left: 0 - mirrored from the right-side
-// version since the bump itself now lives on the opposite side) anchors
-// the flyout's RIGHT edge to the handle's own right edge (flush with
-// cardInner's own left edge), so the whole 260px panel extends further
-// LEFT into open space instead of back over the card's own content.
-const skillsFlyout = css`
+// Cascades DOWN below the header zone, same grid 0fr->1fr reveal language
+// as every other expandable list in this file (see `nestedList`/`detail`) -
+// `tray-list` is a plain literal class (same trick as `.detail`/`.nested`)
+// so `skillsTrayBox`'s own `:hover .tray-list, .is-open .tray-list` rule
+// can target it. No separate positioning of its own anymore - it's just
+// the second child in `skillsTrayBox`'s flex column, sharing the box's
+// background/border/width automatically since it's part of the same
+// element now.
+const skillsTrayListGrid = css`
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
   pointer-events: none;
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 8px;
-  width: 260px;
   transition: grid-template-rows 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
 `
 
-const skillsFlyoutInner = css`
+const skillsTrayListInner = css`
   overflow: hidden;
   min-height: 0;
-  max-height: 480px;
+  max-height: 420px;
   overflow-y: auto;
-  background: ${NERV_BG};
-  border: 1px solid ${NERV_LINE};
-  padding: 10px;
-  box-shadow: 0 4px 28px rgba(0, 0, 0, 0.5);
+  padding: 0 10px 10px 10px;
 
   &::-webkit-scrollbar {
     width: 5px;
@@ -1473,18 +1476,56 @@ const formatSkillLastUsed = (hoursAgo) => {
   return `used ${Math.round(hoursAgo / 24)}d ago`
 }
 
+// formatSkillCounts (2026-08-04) - per Ian: "we need to make sure these
+// are all distinguished [manual vs auto-executed]." A single undifferentiated
+// number used to hide whether a skill's calls came from Ian asking
+// directly or from a scheduled task/another skill invoking it - this
+// spells both out when either is present, e.g. "2 manual · 1 auto",
+// falling back to just whichever one is non-zero if only one kind has
+// happened yet.
+const formatSkillCounts = (skill) => {
+  const { manual_count: manual = 0, auto_count: auto = 0 } = skill
+  if (manual === 0 && auto === 0) return ""
+  if (manual > 0 && auto > 0) return `${manual} manual · ${auto} auto · `
+  if (auto > 0) return `${auto} auto · `
+  return `${manual} manual · `
+}
+
+// "calls" line (2026-08-04) - per Ian: "for these skills like log pose or
+// auto exec they should include what other skills they run or call."
+// Parsed from the skill's own SKILL.md `calls:` frontmatter (see
+// status_summary.py's load_skills_catalog) - only shows up for the
+// handful of skills that actually declare it, not guessed for the rest.
+const skillCallsLine = css`
+  font-size: 10px;
+  color: ${NERV_TEXT_DIM};
+  margin-top: 4px;
+
+  & strong {
+    color: ${STATUS_TEAL};
+    font-weight: 600;
+  }
+`
+
 const SkillRow = ({ skill }) => (
   <div className={skillRow}>
     <div className={skillRowTop}>
       <span className={skillRowName}>{skill.name}</span>
       <span className={skillRowMeta}>
-        {skill.call_count > 0 ? `${skill.call_count}× · ` : ""}
+        {formatSkillCounts(skill)}
         {formatSkillLastUsed(skill.last_called_hours_ago)}
       </span>
     </div>
-    {skill.description && (
+    {(skill.description || (skill.calls && skill.calls.length > 0)) && (
       <div className={`detail ${detail}`} style={{ borderLeftColor: STATUS_TEAL }}>
-        <div className={detailInner}>{skill.description}</div>
+        <div className={detailInner}>
+          {skill.description}
+          {skill.calls && skill.calls.length > 0 && (
+            <div className={skillCallsLine}>
+              <strong>Calls:</strong> {skill.calls.join(", ")}
+            </div>
+          )}
+        </div>
       </div>
     )}
   </div>
@@ -1513,16 +1554,20 @@ const SkillsTab = ({ skills }) => {
   const usedCount = skills.filter((s) => s.call_count > 0).length
   return (
     <div
-      className={`skills-tray-wrap ${skillsTabWrap}`}
+      className={`skills-tray-wrap ${skillsTrayBox}`}
       onMouseEnter={() => { if (cardNode) disarmCollapse(cardNode) }}
       onMouseLeave={() => { if (cardNode) armCollapse(cardNode) }}
     >
-      <div className={skillsTabHandle} onClick={toggleSkillsTray}>
+      {/* onClick lives on the header zone only, not the whole box
+          (2026-08-04) - a click anywhere in the now-unified box would
+          otherwise bubble up and toggle the tray shut while someone's
+          just trying to interact with a row in the open skill list. */}
+      <div className={skillsTrayHandleZone} onClick={toggleSkillsTray}>
         <span className={skillsTabCount}>{skills.length}</span>
         <span className={skillsTabLabel}>SKILL TRAY</span>
       </div>
-      <div className={`flyout ${skillsFlyout}`}>
-        <div className={skillsFlyoutInner}>
+      <div className={`tray-list ${skillsTrayListGrid}`}>
+        <div className={skillsTrayListInner}>
           <div className={skillsFlyoutHeader}>
             {skills.length} skills · {usedCount} used
           </div>

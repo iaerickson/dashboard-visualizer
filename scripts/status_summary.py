@@ -1037,23 +1037,47 @@ def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int) -> di
 
 SKILL_NAME_RE = re.compile(r"^name:\s*(.+)$", re.MULTILINE)
 SKILL_DESC_RE = re.compile(r"^description:\s*(.+)$", re.MULTILINE)
+SKILL_CALLS_RE = re.compile(r"^calls:\s*(.+)$", re.MULTILINE)
 SKILL_DESC_MAX_CHARS = 160
 
 
 def load_skills_catalog(claude_space: Path) -> list:
     """Skills Tray data source (2026-08-04), per Ian: "i want to visualize
-    and keep track of how many skills we have created and get a visual
-    read out of how often they are getting run and brief descriptions of
-    what they do."
+    and keep track of how often they are getting run and brief
+    descriptions of what they do."
 
     Two pieces, merged: (1) scans ClaudeSpace/*/SKILL.md for `name`/
-    `description` (YAML frontmatter, single-line values - matches every
-    real SKILL.md in this workspace today, no full YAML parser needed);
-    (2) reads config/../ClaudeSpace/skills-usage-log.json (written by
-    whichever skill just ran, per PROCESS.md's new Ground Rule - a
+    `description`/`calls` (YAML frontmatter, single-line values - matches
+    every real SKILL.md in this workspace today, no full YAML parser
+    needed); (2) reads config/../ClaudeSpace/skills-usage-log.json
+    (written by whichever skill just ran, per PROCESS.md's Ground Rule - a
     self-reported signal, same honest-proxy pattern as run-log.md/
     relationship-log.md elsewhere in this workspace, not hard telemetry)
     for call_count and how long ago each skill last ran.
+
+    manual_count/auto_count split (2026-08-04), real gap found live - Ian:
+    "it says these have never run? we need to keep track of when they ran
+    and count the number of times... also we need to make sure these are
+    all distinguished [manual vs auto-executed]." Root cause of "never
+    run" for everything: the Ground Rule existed but nothing had actually
+    been appending to the log yet - the mechanism was real, just unused.
+    Seeded one real entry (goal-for-day, which genuinely ran today) rather
+    than fabricating history for skills that didn't actually run. Log
+    entries now carry an optional `"trigger": "manual"|"auto"` field
+    (missing/unrecognized values default to "manual", the safer assumption
+    since most historical calls were Ian asking directly) - each skill's
+    catalog entry reports `call_count` (total), `manual_count`, and
+    `auto_count` separately so the widget can show "3x manual - 2x auto"
+    instead of one undifferentiated number.
+
+    `calls` field (2026-08-04) - some skills invoke OTHER skills as part
+    of their own run (overnight-auto-execute calls log-pose and
+    time-assessor; goal-for-day calls time-assessor) - per Ian: "for these
+    skills like log pose or auto exec they should include what other
+    skills they run or call." Parsed the same single-line-frontmatter way
+    as name/description, comma-separated skill names, only added to the
+    SKILL.md files that are actually known to call others - not guessed
+    for the rest.
 
     Known limitation, flagged honestly rather than silently: this only
     catalogs skills with a SKILL.md file physically present in
@@ -1081,10 +1105,15 @@ def load_skills_catalog(claude_space: Path) -> list:
         description = desc_match.group(1).strip() if desc_match else ""
         if len(description) > SKILL_DESC_MAX_CHARS:
             description = description[:SKILL_DESC_MAX_CHARS].rsplit(" ", 1)[0] + "…"
+        calls_match = SKILL_CALLS_RE.search(text)
+        calls = [c.strip() for c in calls_match.group(1).split(",") if c.strip()] if calls_match else []
         catalog[name] = {
             "name": name,
             "description": description,
+            "calls": calls,
             "call_count": 0,
+            "manual_count": 0,
+            "auto_count": 0,
             "last_called_hours_ago": None,
         }
 
@@ -1097,7 +1126,8 @@ def load_skills_catalog(claude_space: Path) -> list:
         if not isinstance(entries, list):
             entries = []
         now = datetime.now()
-        counts: dict = {}
+        manual_counts: dict = {}
+        auto_counts: dict = {}
         latest_by_skill: dict = {}
         for entry in entries:
             if not isinstance(entry, dict):
@@ -1106,22 +1136,34 @@ def load_skills_catalog(claude_space: Path) -> list:
             at = entry.get("at")
             if not skill or not at:
                 continue
-            counts[skill] = counts.get(skill, 0) + 1
+            trigger = entry.get("trigger") if entry.get("trigger") in ("manual", "auto") else "manual"
+            if trigger == "auto":
+                auto_counts[skill] = auto_counts.get(skill, 0) + 1
+            else:
+                manual_counts[skill] = manual_counts.get(skill, 0) + 1
             try:
                 at_dt = datetime.fromisoformat(at)
             except ValueError:
                 continue
             if skill not in latest_by_skill or at_dt > latest_by_skill[skill]:
                 latest_by_skill[skill] = at_dt
-        for skill, count in counts.items():
+        all_skills = set(manual_counts) | set(auto_counts)
+        for skill in all_skills:
             if skill not in catalog:
                 catalog[skill] = {
                     "name": skill,
                     "description": "",
+                    "calls": [],
                     "call_count": 0,
+                    "manual_count": 0,
+                    "auto_count": 0,
                     "last_called_hours_ago": None,
                 }
-            catalog[skill]["call_count"] = count
+            manual = manual_counts.get(skill, 0)
+            auto = auto_counts.get(skill, 0)
+            catalog[skill]["manual_count"] = manual
+            catalog[skill]["auto_count"] = auto
+            catalog[skill]["call_count"] = manual + auto
             last = latest_by_skill.get(skill)
             if last:
                 catalog[skill]["last_called_hours_ago"] = round((now - last).total_seconds() / 3600, 1)
