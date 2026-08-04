@@ -133,67 +133,20 @@ const toggleExpanded = (e) => {
   setExpanded(cardEl, !cardExpanded)
 }
 
-// cardNode / resetsSectionNode (2026-08-04) - captured via plain ref
-// callbacks (no hooks available in this environment - see this file's
-// other module-level-flag comments for why direct DOM refs are already the
-// established pattern here). `cardNode` is now the single source of truth
-// `toggleExpanded`/`armCollapse`/`disarmCollapse` all target (see
-// cardOuter's own comment for why the old `card` div split into
-// cardOuter/cardInner); `resetsSectionNode` exists purely so
-// positionSkillsTab (below) can measure exactly where to sit vertically
-// instead of guessing a fixed pixel offset that silently drifts out of
-// alignment the moment a row above it changes height.
-let cardNode = null
-let resetsSectionNode = null
-
-// positionSkillsTab (2026-08-04) - per Ian: the tray should "perfectly line
-// up with the top of the big mode bar with the first orange line after
-// weekly usage," i.e. resetsSection's own bottom border. A fixed pixel
-// guess (the tray's original `top: 60px`) drifts the moment anything above
-// it changes height (a resets row added/removed, Daily Goals appearing,
-// etc.), and resetsSection's own real rendered height isn't even settled
-// immediately when the tray mounts - it's mid CSS grid-expand transition
-// (`.expand`'s 0fr -> 1fr) the whole time the card is opening. A
-// ResizeObserver on resetsSection itself sidesteps both problems: it fires
-// on every box-size change, including the frames of that same expand
-// transition, so the tray tracks smoothly into its final position in
-// lockstep with the rest of big mode opening, instead of snapping there
-// from a stale guess after the fact - and it stays correct forever after
-// with zero maintenance if the rows above it ever change.
+// cardNode (2026-08-04) - captured via a plain ref callback (no hooks
+// available in this environment - see this file's other module-level-flag
+// comments for why direct DOM refs are already the established pattern
+// here). Single source of truth `toggleExpanded`/`armCollapse`/
+// `disarmCollapse` all target (see cardOuter's own comment for why the old
+// `card` div split into cardOuter/cardInner).
 //
-// Retry loop added (2026-08-04) - SkillsTray is now ALWAYS rendered (see
-// its own comment on why it's no longer conditionally mounted), including
-// on the very first paint before any interaction, when ref-callback
-// ordering between resetsSection and the tray isn't something this code
-// can rely on. A few short retries covers the case where this ref fires
-// before resetsSectionNode/cardNode are captured, without needing an
-// exact ordering guarantee either way.
-let skillsTabObserver = null
-
-const positionSkillsTab = (tabEl) => {
-  if (!tabEl) return
-  let attempts = 0
-  const reposition = () => {
-    if (!tabEl.isConnected) return
-    if (resetsSectionNode && cardNode) {
-      const sectionBottom = resetsSectionNode.getBoundingClientRect().bottom
-      const cardTop = cardNode.getBoundingClientRect().top
-      tabEl.style.top = `${Math.round(sectionBottom - cardTop)}px`
-      if (skillsTabObserver) skillsTabObserver.disconnect()
-      if (typeof ResizeObserver !== "undefined") {
-        skillsTabObserver = new ResizeObserver(reposition)
-        skillsTabObserver.observe(resetsSectionNode)
-      }
-    } else {
-      tabEl.style.top = "56px"
-      if (attempts < 10) {
-        attempts += 1
-        setTimeout(reposition, 60)
-      }
-    }
-  }
-  reposition()
-}
+// Used to measure resetsSection's own position for the Skills Tray's
+// vertical placement (via a ResizeObserver, `positionSkillsTab`) - dropped
+// 2026-08-04, per Ian: the tray's resting position needed to be flush with
+// the CARD's own top edge, not resetsSection's bottom border (see
+// skillsTabWrap's own `top: 0` comment) - simpler and exact, no
+// measurement needed at all anymore.
+let cardNode = null
 
 export const command =
   "python3 '/Users/ianerickson/Desktop/Projects/dashboard-visualizer/scripts/status_summary.py'"
@@ -1285,9 +1238,9 @@ const groupNestedIndent = css`
 //     the text") - 56px x 168px (still a true semicircle: width ==
 //     height/2) instead of the old 40x80, with the vertical label bumped
 //     to 11px and a little letter-spacing room to breathe.
-//   - Vertically positioned by real measurement via `positionSkillsTab`
-//     (unchanged mechanism, still tracks resetsSection's own bottom
-//     border - "the first orange line after weekly usage").
+//   - Vertically flush with the card's own top edge (`top: 0` - see
+//     skillsTabWrap's own comment for why this replaced an earlier
+//     measured-position version tied to resetsSection's bottom border).
 //   - Hover OR click both open the flyout (`&:hover .flyout, &.is-open
 //     .flyout` share one rule; click toggles `.is-open` via
 //     `toggleSkillsTray`).
@@ -1311,6 +1264,31 @@ const toggleSkillsTray = (e) => {
 // used (see this block's own comment above for why it moved to this
 // side).
 //
+// top: 0 (2026-08-04, real placement fix, replacing the old
+// ResizeObserver/positionSkillsTab measurement entirely) - per Ian, after
+// seeing the measured-position version live: "size is correct but
+// placement is not correct... needs to be moved up so that the upper
+// boundary/top most part of half circle aligns with upper boundary/top
+// most part of the big mode." The earlier version anchored to
+// resetsSection's own bottom border, chasing a literal reading of "the
+// first orange line after weekly usage" from the original request - what
+// Ian actually wants is simpler and exact: flush with cardInner's own top
+// edge, same y-coordinate as the very top of the card itself. `top: 0`
+// on cardOuter's own coordinate system does this directly and precisely -
+// no measurement, no ResizeObserver, no race with the expand transition,
+// nothing left to get subtly wrong. `resetsSectionNode`/`positionSkillsTab`
+// are gone; this wrap no longer needs a ref at all.
+//
+// Entrance: "flip out seemingly from behind rotation style... the
+// animation can go above that spot but the end static position cannot."
+// `transform-origin: top right` pivots the bump at the exact corner where
+// it meets the card's own top-left - rotating from `rotate(-90deg)`
+// (folded flat upward, tucked behind/above the card) down to
+// `rotate(0deg)` sweeps it into place from ABOVE its resting spot, never
+// below, and lands EXACTLY on the `top: 0` resting position Ian called
+// out as non-negotiable - the overshoot lives entirely in the animation
+// path, never in the settled state.
+//
 // Visibility is driven by the ancestor `.is-expanded` class (2026-08-04) -
 // `.is-expanded &` compiles (via stylis' standard nesting, same trick used
 // for `.detail`/`.nested` elsewhere) to "when an ancestor of this element
@@ -1326,18 +1304,19 @@ const toggleSkillsTray = (e) => {
 // pattern used throughout this file.
 const skillsTabWrap = css`
   position: absolute;
+  top: 0;
   left: -56px;
   z-index: 5;
   opacity: 0;
-  transform: scale(0.4) rotate(40deg);
+  transform: rotate(-90deg);
   pointer-events: none;
-  transform-origin: right center;
+  transform-origin: top right;
   transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1) 280ms,
     transform 0.5s cubic-bezier(0.16, 1, 0.3, 1) 280ms;
 
   .is-expanded & {
     opacity: 1;
-    transform: scale(1) rotate(0deg);
+    transform: rotate(0deg);
     pointer-events: auto;
     transition-delay: 0s;
   }
@@ -1535,7 +1514,6 @@ const SkillsTab = ({ skills }) => {
   return (
     <div
       className={`skills-tray-wrap ${skillsTabWrap}`}
-      ref={positionSkillsTab}
       onMouseEnter={() => { if (cardNode) disarmCollapse(cardNode) }}
       onMouseLeave={() => { if (cardNode) armCollapse(cardNode) }}
     >
@@ -2429,7 +2407,7 @@ export const render = (state) => {
       <div className={`expand ${expandWrap}`}>
         <div className={expandInner}>
           {hasResets && (
-            <div className={resetsSection} ref={(el) => { resetsSectionNode = el }}>
+            <div className={resetsSection}>
               {/* onClick locked to overdue-only (2026-08-02), per Ian:
                   "clicking the timer should only reset it to 60 if its
                   zero, it needs to stay in place after counting down."
