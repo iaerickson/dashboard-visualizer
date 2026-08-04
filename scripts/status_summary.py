@@ -478,6 +478,25 @@ def most_recently_touched_project(claude_space: Path) -> dict | None:
     return {"name": best, "hours_ago": round(hours_ago, 1)}
 
 
+def latest_tracker_activity_mtime(claude_space: Path) -> float | None:
+    """Raw max mtime across every project README.md in the tracker - same
+    directory walk as most_recently_touched_project above, just exposing the
+    timestamp itself rather than a formatted "N hours ago" string. Added
+    2026-08-04 as an activity signal for load_session_reset (see its own
+    comment) - per PROCESS.md's own convention, any real Claude work
+    (interactive or via a scheduled task) leaves a dated Notes entry in the
+    project's own README.md, so "did any README change since X" is a
+    reasonably honest local proxy for "did a real Claude session run since
+    X" - not a live usage API (none exists), but a much closer match than a
+    blind fixed-interval timer."""
+    best_mtime = None
+    for readme in claude_space.glob("*/README.md"):
+        mtime = readme.stat().st_mtime
+        if best_mtime is None or mtime > best_mtime:
+            best_mtime = mtime
+    return best_mtime
+
+
 def next_occurrence(now: datetime, weekday_name: str, time_str: str) -> datetime:
     """Next datetime matching the given weekday ('monday'..'sunday') and 'HH:MM' local time.
 
@@ -535,14 +554,18 @@ def load_usage_resets(config_path: Path, now: datetime) -> list[dict] | None:
     return results or None
 
 
-def load_session_reset(config_path: Path, now: datetime) -> dict | None:
+def load_session_reset(config_path: Path, now: datetime, last_activity_mtime: float | None = None) -> dict | None:
     """Reads config/session_reset.json - a MANUALLY reported anchor point, not
     something computed live (the ~5hr session window is rolling/usage-dependent,
     no fixed clock - see dashboard-visualizer/README.md). Format:
     {"reported_at": "<ISO timestamp>", "hours_from_report": 1.0}
     Ian reports "resets in X hours" at some moment; this just counts down from
     that anchor and honestly shows how long ago it was reported, since the
-    number drifts out of truth the more time passes without a fresh report."""
+    number drifts out of truth the more time passes without a fresh report.
+
+    last_activity_mtime (2026-08-04) is the raw timestamp from
+    latest_tracker_activity_mtime - see the reset-on-first-activity block
+    below for how it's used."""
     if not config_path.exists():
         return None
     try:
@@ -561,40 +584,50 @@ def load_session_reset(config_path: Path, now: datetime) -> dict | None:
 
     total_hours = float(data["hours_from_report"])
 
-    # Auto-roll (2026-08-02), per Ian: the gauge kept going "stale" and
-    # needing a manual re-report, and he asked for logic that "auto-adjusts
-    # and maintains" instead. Honest version of that, given there's still no
-    # API exposing Claude's real session-reset clock (confirmed, see
-    # NEEDS-IAN.md - this is a genuine constraint, not something skipped):
-    # once the last-reported anchor has fully lapsed, roll it forward by
-    # whole multiples of the SAME cadence Ian last reported (total_hours)
-    # instead of just sitting at "stale" until he manually types a fresh
-    # "resets in Xh Ym." This is a rolling ESTIMATE, not a true sync - if
-    # Claude's actual reset cadence drifts from that last-known number, this
-    # will drift right along with it, same as before. What it fixes is the
-    # constant nagging: the gauge now self-maintains a live countdown
-    # in between real corrections, rather than freezing dead the moment one
-    # cycle's estimate runs out. Persisted back to session_reset.json so the
-    # roll only has to happen once per lapsed cycle, not recomputed fresh
-    # (and rewritten) on every single poll.
+    # Reset-on-first-activity (2026-08-04), replacing the earlier
+    # roll-forward-by-fixed-cycles approach (2026-08-02). Per Ian, live: the
+    # old auto-roll was "pretty inaccurate" - it ticked the anchor forward by
+    # a blind whole-cycle timer regardless of whether anything had actually
+    # happened, so a quiet stretch with no real Claude usage still silently
+    # advanced the window as if a fresh one had started. Ian's own framing of
+    # how this actually works: "it essentially starts a 5hr timer when the
+    # first Claude task or prompt or scheduled thing runs" after the
+    # previous window closes - not on a fixed clock. That's a real behavior
+    # difference worth matching, given there's still no API exposing
+    # Claude's true session-reset boundary (confirmed, see NEEDS-IAN.md).
+    #
+    # New logic: once the window has fully expired, DON'T roll forward on a
+    # schedule - hold at "expired" (already_passed stays true, gauge reads
+    # empty) until real tracker activity is observed. last_activity_mtime
+    # (see latest_tracker_activity_mtime's own comment for why README mtimes
+    # are an honest proxy for "a Claude session did something") is compared
+    # against the window's own expiry: the first time that mtime lands AFTER
+    # expiry, that moment - not "now," which could be well later if nobody's
+    # glanced at the widget in a while - becomes the new window's real start,
+    # matching the "first one that runs" framing exactly. Still an estimate
+    # (a same-machine file-edit signal, not Anthropic's real usage clock),
+    # but it only moves in response to something actually happening, instead
+    # of guessing forward on a timer regardless.
     if total_hours > 0:
-        elapsed_since_report = (now - reported_at).total_seconds()
         cycle_seconds = total_hours * 3600
-        if elapsed_since_report >= cycle_seconds:
-            cycles_passed = int(elapsed_since_report // cycle_seconds)
-            reported_at = reported_at + timedelta(seconds=cycles_passed * cycle_seconds)
-            try:
-                data["reported_at"] = reported_at.isoformat(timespec="seconds")
-                data["note"] = (
-                    f"Auto-rolled forward {cycles_passed} cycle(s) by status_summary.py "
-                    f"on {now.isoformat(timespec='seconds')} - rolling estimate using the last "
-                    "reported cadence, not a true live sync (no session-reset API exists to "
-                    "confirm the real boundary). Overwritten the moment Ian reports a fresh "
-                    "'resets in Xh Ym.'"
-                )
-                config_path.write_text(json.dumps(data, indent=2))
-            except OSError:
-                pass  # display still works this poll even if the write fails
+        expires_at = reported_at + timedelta(seconds=cycle_seconds)
+        if now >= expires_at and last_activity_mtime is not None:
+            activity_at = datetime.fromtimestamp(last_activity_mtime)
+            if activity_at > expires_at:
+                reported_at = activity_at
+                try:
+                    data["reported_at"] = reported_at.isoformat(timespec="seconds")
+                    data["note"] = (
+                        f"Auto-reset by status_summary.py on {now.isoformat(timespec='seconds')} - "
+                        "the previous session window expired and this is the first tracker "
+                        "activity (a project README update) seen since then, treated as the start "
+                        "of the new session window. Estimate based on local file activity, not a "
+                        "true live sync (no session-reset API exists) - overwritten the moment Ian "
+                        "reports a fresh 'resets in Xh Ym.'"
+                    )
+                    config_path.write_text(json.dumps(data, indent=2))
+                except OSError:
+                    pass  # display still works this poll even if the write fails
 
     target = reported_at + timedelta(hours=total_hours)
     seconds_left = (target - now).total_seconds()
@@ -812,7 +845,9 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
         "needs_ian_count": count_needs_ian(needs_ian_text),
         "most_recent_project": most_recently_touched_project(claude_space),
         "usage_resets": load_usage_resets(resets_config_path, now),
-        "session_reset": load_session_reset(session_reset_config_path, now),
+        "session_reset": load_session_reset(
+            session_reset_config_path, now, latest_tracker_activity_mtime(claude_space)
+        ),
         "personal_health": load_personal_health(personal_health_config_path, now),
         "sections": sections,
         "needs_attention": parse_needs_ian_items(needs_ian_text),

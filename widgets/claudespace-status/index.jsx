@@ -563,21 +563,21 @@ const resetsSection = css`
   border-bottom: 1px solid ${NERV_LINE};
 `
 
-// white-space: normal + text-align: right (2026-08-02) - fixes a real
-// layout bug Ian caught live: this line's text ("stale — needs a fresh
-// check-in") was long enough to stretch resetBarCol wider than its
-// siblings (that column had no fixed width, just min-width: 100px, so it
-// grew to fit its widest child) - and since resetGaugeTrack is width: 100%
-// of that column, the SESSION bar itself rendered visibly wider than
-// LAST BREAK/WEEKLY USAGE's. Now wraps within the column's own fixed
-// width (see resetBarCol) instead of forcing the column wider.
+// Made inline (2026-08-04), per Ian: even after shortening this text
+// (previous round), a gauge WITH a stale/reset message still rendered one
+// line taller than a gauge without one - Last Break and Session never quite
+// matched heights depending on which state each happened to be in. Moved
+// from its own block line below the value to inline, appended directly
+// after valueText on the SAME line (see ResetGauge's render below) - every
+// gauge's row is now exactly bar + one value line, always, whether or not
+// this text is present. Kept short (see call sites) so it never wraps
+// inside resetBarCol's fixed 150px width even combined with valueText.
 const resetStale = css`
-  font-size: 10px;
+  font-size: 9px;
   color: ${NERV_ORANGE};
-  margin-top: 2px;
-  letter-spacing: 0.03em;
-  white-space: normal;
-  text-align: right;
+  margin-left: 5px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 `
 
 // Reset gauge layout (2026-07-31, per Ian: with only the session bar built,
@@ -1281,6 +1281,12 @@ const resetGaugeFill = css`
 // staleText / onClick (2026-07-31, added for the personal-health gauge
 // below): both optional so Session/Weekly usage - the two existing callers -
 // render exactly as before (default stale message, no click affordance).
+// Stale message moved inline (2026-08-04), per Ian: "keep them same spacing
+// on all the bars... maybe have it inline next to the time." Now rendered
+// INSIDE resetValueRight, right after valueText on the same line, instead of
+// as a second block-level line below it - resetBarCol is always exactly
+// "bar + one value line" now, so every gauge stays the same height whether
+// or not it currently has a stale/reset message.
 const ResetGauge = ({ label, valueText, remainingFraction, stale, staleText, onClick, icon }) => {
   const remainingPct = Math.max(0, Math.min(100, Math.round((remainingFraction ?? 0) * 100)))
   const hue = Math.round(Math.max(0, Math.min(1, remainingFraction ?? 0)) * 120)
@@ -1299,8 +1305,10 @@ const ResetGauge = ({ label, valueText, remainingFraction, stale, staleText, onC
         <div className={resetGaugeTrack}>
           <div className={resetGaugeFill} style={{ width: `${remainingPct}%`, ...gaugeVars }} />
         </div>
-        <span className={resetValueRight}>{valueText}</span>
-        {stale && <span className={resetStale}>{staleText || "stale — needs a fresh check-in"}</span>}
+        <span className={resetValueRight}>
+          {valueText}
+          {stale && <span className={resetStale}>{staleText || "needs a check-in"}</span>}
+        </span>
       </div>
     </div>
   )
@@ -1716,22 +1724,25 @@ export const render = (state) => {
                   (overdue always false while away, forced server-side), and
                   auto-resets last_break_at the moment activity resumes -
                   this just swaps the icon/color to match that state. */}
-              {/* staleText shortened (2026-08-04), per Ian: the old
-                  "overdue — take a break (click to reset)" wrapped to two
-                  lines inside resetBarCol's fixed 150px width, making this
-                  gauge visibly taller than SESSION underneath it - uneven
-                  spacing between them. valueText already reads "overdue" in
-                  bold right above this line, so repeating it here was pure
-                  redundancy anyway; trimming to just the actual instruction
-                  keeps it on one line and brings the two gauges back to
-                  matching height. */}
+              {/* staleText shortened + moved inline (2026-08-04), per Ian:
+                  the old "overdue — take a break (click to reset)" wrapped
+                  to two lines inside resetBarCol's fixed 150px width, making
+                  this gauge visibly taller than SESSION underneath it -
+                  uneven spacing between them. First pass just shortened the
+                  text; Ian's follow-up asked to keep every gauge's spacing
+                  identical regardless of state, so ResetGauge now renders
+                  this inline next to valueText instead of on its own line
+                  (see ResetGauge's own comment) - "reset" here reads as
+                  "· reset" right after the bold "overdue," and the whole row
+                  already has a pointer cursor + hover tint from onClick
+                  being set, so no need to spell out "click to." */}
               {personal_health && (
                 <ResetGauge
                   label={personal_health.label}
                   valueText={formatHealthGauge(personal_health)}
                   remainingFraction={1 - personal_health.elapsed_fraction}
                   stale={personal_health.overdue}
-                  staleText="click to reset"
+                  staleText="reset"
                   onClick={personal_health.overdue ? resetHealthTimer : undefined}
                   icon={personal_health.away ? <IconSleep /> : <IconHeartbeat />}
                 />
