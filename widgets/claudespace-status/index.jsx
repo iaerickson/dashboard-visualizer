@@ -129,6 +129,60 @@ const toggleExpanded = (e) => {
   setExpanded(cardEl, !cardExpanded)
 }
 
+// cardNode / resetsSectionNode (2026-08-04) - captured via plain ref
+// callbacks (no hooks available in this environment - see this file's
+// other module-level-flag comments for why direct DOM refs are already the
+// established pattern here) so the Skills Tray, which renders as a SIBLING
+// of `card` and can't see its layout through normal CSS cascade, can (a)
+// still participate in card's own hover-intent collapse timer (see
+// SkillsTab's own onMouseEnter/onMouseLeave, per Ian: "when this flips
+// out... that now needs to register as true since the tracker size has
+// expanded") and (b) measure exactly where to sit vertically (see
+// positionSkillsTab below) instead of guessing a fixed pixel offset that
+// silently drifts out of alignment the moment a row above it changes
+// height.
+let cardNode = null
+let resetsSectionNode = null
+
+// positionSkillsTab (2026-08-04) - per Ian: the tab should "perfectly line
+// up with the top of the big mode bar with the first orange line after
+// weekly usage," i.e. resetsSection's own bottom border. A fixed pixel
+// guess (the tab's original `top: 60px`) drifts the moment anything above
+// it changes height (a resets row added/removed, Daily Goals appearing,
+// etc.), and resetsSection's own real rendered height isn't even settled
+// immediately when the tab mounts - it's still mid CSS grid-expand
+// transition (`.expand`'s 0fr -> 1fr, ~780ms incl. delay) at that instant.
+// A ResizeObserver on resetsSection itself sidesteps both problems: it
+// fires on every box-size change, including the frames of that same
+// expand transition, so the tab tracks smoothly into its final position
+// instead of snapping there from a stale guess - and it stays correct
+// forever after with zero maintenance if the rows above it ever change.
+// Falls back to a plain constant if resetsSection isn't in the DOM at all
+// (hasResets false - no usage_resets/session_reset/personal_health
+// configured yet), so the tab still renders somewhere sane rather than at
+// 0,0.
+let skillsTabObserver = null
+
+const positionSkillsTab = (tabEl) => {
+  if (!tabEl) return
+  const reposition = () => {
+    if (!tabEl.isConnected) return
+    if (resetsSectionNode && cardNode) {
+      const sectionBottom = resetsSectionNode.getBoundingClientRect().bottom
+      const cardTop = cardNode.getBoundingClientRect().top
+      tabEl.style.top = `${Math.round(sectionBottom - cardTop)}px`
+    } else {
+      tabEl.style.top = "56px"
+    }
+  }
+  reposition()
+  if (skillsTabObserver) skillsTabObserver.disconnect()
+  if (typeof ResizeObserver !== "undefined" && resetsSectionNode) {
+    skillsTabObserver = new ResizeObserver(reposition)
+    skillsTabObserver.observe(resetsSectionNode)
+  }
+}
+
 export const command =
   "python3 '/Users/ianerickson/Desktop/Projects/dashboard-visualizer/scripts/status_summary.py'"
 
@@ -1143,52 +1197,111 @@ const groupNestedIndent = css`
 
 // Skills Tray (2026-08-04), per Ian: "i want to visualize and keep track
 // of how many skills we have created and get a visual read out of how
-// often they are getting run and brief descriptions of what they do...
-// maybe when command space goes big mode, a side piece flips open like
-// swiss army knife called skills tray." A small vertical tab fixed to the
-// card's right edge, visible only in big mode (see render()'s own
-// `cardExpanded &&` guard); hovering it flips out a panel listing every
-// skill from status_summary.py's `load_skills_catalog`, sorted by call
-// count, each with a "last used" caption and a hover-expandable brief
-// description - same `detail`/hover-reveal language as every other row in
-// this file.
-//
+// often they are getting run and brief descriptions of what they do."
 // Rendered as a SIBLING of `card` in render(), not a child - `card` has
 // its own `overflow: hidden` (needed for the ambient sweep animation and
 // its clipped-corner shape), which would clip a panel meant to visually
 // escape the card's own bounding box. Both `card` and this end up as
-// direct children of Übersicht's own outer widget container (see this
-// file's `className` export), so `position: absolute` here sizes/
-// positions relative to that same shared box - `right: -27px` reliably
-// lands just past the card's own right edge regardless of card's internal
-// layout, and the flyout opens back toward the card (`right: 100%`)
-// rather than further off toward the screen's own right edge, since the
-// widget already sits close to it (`right: 40px` in `className`).
+// direct children of Übersicht's own outer widget container, so
+// `position: absolute` here sizes/positions relative to that same shared
+// box. Only ever rendered while `cardExpanded` (render()'s own guard) -
+// never present in mini mode at all, not just hidden by CSS.
+//
+// Redesigned (2026-08-04), per Ian, having lived with the first version:
+// "skills tray is kind of ugly. i dont want it to overlap anything on
+// command space... maybe a half circle that perfectly lines up with the
+// top of the big mode bar with the first orange line after weekly
+// usage. that half circle smoothly spins out in big mode and says skill
+// tray. moving the mouse over that to hover or click then cascades down
+// the skills." Replaces the old vertical "SKILLS" flag tab (fixed
+// `top: 60px` guess, flyout opening sideways back toward the card - which
+// is what read as overlapping/ugly) with:
+//   - a true half-circle bump (see skillsTabHandle - width == height/2,
+//     border-radius clamps the two right corners into an exact semicircle)
+//     sitting flush against the card's own right edge, vertically
+//     positioned via positionSkillsTab (see that function's own comment)
+//     so its flat top edge lands exactly on resetsSection's bottom
+//     border - "the first orange line after weekly usage" - instead of a
+//     guessed pixel offset that drifts.
+//   - a spin-in entrance (`tabSpinOut` keyframe) that plays once on mount,
+//     since this component only mounts the instant `cardExpanded` flips
+//     true - no extra JS trigger needed.
+//   - the flyout now drops straight DOWN from the bump ("cascades down
+//     the skills") instead of sideways, reusing the same grid 0fr->1fr
+//     reveal every other expandable list in this file already uses.
+//   - hover OR click both open it now (`&:hover .flyout, &.is-open
+//     .flyout` share the same rule; click toggles `is-open` via
+//     toggleSkillsTray below), not hover-only.
+//   - onMouseEnter/onMouseLeave call disarmCollapse/armCollapse on the
+//     captured `cardNode` (see that variable's own comment) so hovering
+//     the tray - which sits outside `card`'s own DOM subtree and would
+//     otherwise never fire card's mouseleave-based collapse timer, or
+//     worse, silently let it fire while the tray is still open - counts
+//     as "still hovering the tracker" exactly like Ian asked: "when this
+//     flips out... that now needs to register as true since the tracker
+//     size has expanded."
+let skillsTrayOpen = false
+
+const toggleSkillsTray = (e) => {
+  e.stopPropagation()
+  skillsTrayOpen = !skillsTrayOpen
+  const wrapEl = e.currentTarget.closest(".skills-tray-wrap")
+  if (wrapEl) wrapEl.classList.toggle("is-open", skillsTrayOpen)
+}
+
+// right: -40px (2026-08-04, real overlap bug found from Ian's own
+// screenshot): -40px == -(handle's own 40px width), which puts the
+// handle's flat LEFT edge exactly flush with card's right edge and the
+// whole bump poking outward from there - zero overlap into the card's own
+// content. An earlier -20px value split the bump half-in/half-out,
+// overlapping card's right-edge padding, which combined with the old
+// flyout opening sideways (`right: 100%`, since replaced - see
+// skillsFlyout below) was the actual "kind of ugly... don't want it to
+// overlap anything" Ian flagged.
 const skillsTabWrap = css`
   position: absolute;
-  top: 60px;
-  right: -27px;
+  right: -40px;
   z-index: 5;
 
-  &:hover .flyout {
+  &:hover .flyout,
+  &.is-open .flyout {
+    transition-delay: 120ms;
+    grid-template-rows: 1fr;
     opacity: 1;
     pointer-events: auto;
-    transform: translateX(0);
+  }
+
+  @keyframes tabSpinOut {
+    from {
+      opacity: 0;
+      transform: scale(0.3) rotate(-60deg);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+    }
   }
 `
 
+// True half-circle (2026-08-04): width is exactly half of height, so the
+// two right-corner border-radius values (clamped to min(width, height/2) =
+// 40px either way) produce a real semicircle, not just a rounded rect -
+// flat edge flush against the card, round edge poking out to the right.
 const skillsTabHandle = css`
-  width: 26px;
-  padding: 10px 4px;
+  width: 40px;
+  height: 80px;
   background: ${NERV_BG};
   border: 1px solid ${NERV_LINE};
   border-left: none;
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), 50% 100%, 0 calc(100% - 10px));
+  border-radius: 0 999px 999px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   cursor: pointer;
+  transform-origin: left center;
+  animation: tabSpinOut 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
   transition: background 0.2s ease, border-color 0.2s ease;
 
   &:hover {
@@ -1200,8 +1313,8 @@ const skillsTabHandle = css`
 const skillsTabLabel = css`
   writing-mode: vertical-rl;
   transform: rotate(180deg);
-  font-size: 9px;
-  letter-spacing: 0.15em;
+  font-size: 8px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: ${NERV_TEXT_DIM};
 `
@@ -1212,22 +1325,42 @@ const skillsTabCount = css`
   color: ${NERV_ORANGE};
 `
 
+// Cascades DOWN from the bump now (2026-08-04), not sideways toward the
+// card - same grid 0fr->1fr reveal language as every other expandable list
+// in this file (see `nestedList`/`detail`), triggered here via
+// skillsTabWrap's own `:hover .flyout, .is-open .flyout` rule above
+// instead of a plain opacity/transform toggle.
+// left: 0 (2026-08-04, not right: 0) - anchors the flyout's LEFT edge to
+// the handle's own left edge (which now sits flush with card's right edge,
+// see skillsTabWrap's own comment above), so the whole 260px panel extends
+// rightward into the open space beside the card instead of leftward back
+// OVER it - a real, literal instance of the overlap Ian flagged, not just
+// a style nitpick: the old `right: 100%` (sideways) and even a naive
+// `right: 0` here (downward but still anchored to the wrong edge) both put
+// most of this panel's width directly on top of Active/Daily Goals
+// content.
 const skillsFlyout = css`
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
   position: absolute;
-  top: 0;
-  right: 100%;
-  margin-right: 6px;
+  top: 100%;
+  left: 0;
+  margin-top: 8px;
   width: 260px;
+  transition: grid-template-rows 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+`
+
+const skillsFlyoutInner = css`
+  overflow: hidden;
+  min-height: 0;
   max-height: 480px;
   overflow-y: auto;
   background: ${NERV_BG};
   border: 1px solid ${NERV_LINE};
   padding: 10px;
   box-shadow: 0 4px 28px rgba(0, 0, 0, 0.5);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(6px);
-  transition: opacity 0.25s ease, transform 0.25s ease;
 
   &::-webkit-scrollbar {
     width: 5px;
@@ -1317,22 +1450,33 @@ const SkillRow = ({ skill }) => (
 
 // SkillsTab - see the css comment above (`skillsTabWrap`) for the full
 // design rationale, including why this renders as a sibling of `card`.
+// `skills-tray-wrap` is a plain literal class (same "literal class
+// alongside Emotion's hash" trick used for `.detail`/`.nested` elsewhere)
+// so toggleSkillsTray's click handler can find its own root via
+// `closest()` without needing a ref of its own.
 const SkillsTab = ({ skills }) => {
   if (!skills || skills.length === 0) return null
   const usedCount = skills.filter((s) => s.call_count > 0).length
   return (
-    <div className={skillsTabWrap}>
-      <div className={skillsTabHandle}>
+    <div
+      className={`skills-tray-wrap ${skillsTabWrap}`}
+      ref={positionSkillsTab}
+      onMouseEnter={() => { if (cardNode) disarmCollapse(cardNode) }}
+      onMouseLeave={() => { if (cardNode) armCollapse(cardNode) }}
+    >
+      <div className={skillsTabHandle} onClick={toggleSkillsTray}>
         <span className={skillsTabCount}>{skills.length}</span>
-        <span className={skillsTabLabel}>SKILLS</span>
+        <span className={skillsTabLabel}>SKILL TRAY</span>
       </div>
       <div className={`flyout ${skillsFlyout}`}>
-        <div className={skillsFlyoutHeader}>
-          {skills.length} skills · {usedCount} used
+        <div className={skillsFlyoutInner}>
+          <div className={skillsFlyoutHeader}>
+            {skills.length} skills · {usedCount} used
+          </div>
+          {skills.map((s) => (
+            <SkillRow key={s.name} skill={s} />
+          ))}
         </div>
-        {skills.map((s) => (
-          <SkillRow key={s.name} skill={s} />
-        ))}
       </div>
     </div>
   )
@@ -2126,6 +2270,7 @@ export const render = (state) => {
     <div>
     <div
       className={cardExpanded ? `${card} is-expanded` : card}
+      ref={(el) => { if (el) cardNode = el }}
       onMouseEnter={(e) => disarmCollapse(e.currentTarget)}
       onMouseLeave={(e) => armCollapse(e.currentTarget)}
     >
@@ -2204,7 +2349,7 @@ export const render = (state) => {
       <div className={`expand ${expandWrap}`}>
         <div className={expandInner}>
           {hasResets && (
-            <div className={resetsSection}>
+            <div className={resetsSection} ref={(el) => { resetsSectionNode = el }}>
               {/* onClick locked to overdue-only (2026-08-02), per Ian:
                   "clicking the timer should only reset it to 60 if its
                   zero, it needs to stay in place after counting down."

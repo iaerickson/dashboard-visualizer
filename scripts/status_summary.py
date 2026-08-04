@@ -533,7 +533,7 @@ def most_recently_touched_project(claude_space: Path) -> dict | None:
     return {"name": best, "hours_ago": round(hours_ago, 1)}
 
 
-def latest_tracker_activity_mtime(claude_space: Path) -> float | None:
+def latest_tracker_activity_mtime(claude_space: Path, repo_dir: Path | None = None) -> float | None:
     """Raw max mtime across every project README.md in the tracker - same
     directory walk as most_recently_touched_project above, just exposing the
     timestamp itself rather than a formatted "N hours ago" string. Added
@@ -543,12 +543,55 @@ def latest_tracker_activity_mtime(claude_space: Path) -> float | None:
     project's own README.md, so "did any README change since X" is a
     reasonably honest local proxy for "did a real Claude session run since
     X" - not a live usage API (none exists), but a much closer match than a
-    blind fixed-interval timer."""
+    blind fixed-interval timer.
+
+    Widened same day, real bug found live: this only ever looked at
+    `claude_space.glob("*/README.md")` (one level under ClaudeSpace) - a
+    whole session's worth of real, continuous Claude activity building THIS
+    widget lives entirely under dashboard-visualizer's own repo (Projects/
+    dashboard-visualizer - widgets/*/index.jsx, scripts/*.py, config/*.json,
+    this repo's own README.md), a sibling directory this glob never touched.
+    Per Ian, live: "we were supposed to implement logic that detects initial
+    activity after the timer runs down to refresh, why isn't that working" -
+    root cause was the signal being too narrow, not the reset-on-activity
+    logic itself (that part already worked correctly once given a true
+    activity timestamp - confirmed by re-running load_session_reset by hand
+    with the real widening below). Now also takes `repo_dir` (this script's
+    own repo root, i.e. script_dir.parent in build_summary) and additionally
+    scans: ClaudeSpace's own root-level *.md files (PROCESS.md, NEEDS-IAN.md,
+    INDEX.md - work that only touches those, not a specific project's
+    README, was the same blind spot one level up) and skills-usage-log.json
+    (built the same day specifically as a self-reported activity signal -
+    see PROCESS.md's Ground Rule on it); and, if repo_dir is given, that
+    repo's own README.md, config/*.json, scripts/*.py, and every
+    widgets/*/index.jsx - anything actually edited during a live widget
+    session like this one."""
     best_mtime = None
-    for readme in claude_space.glob("*/README.md"):
-        mtime = readme.stat().st_mtime
+
+    def consider(path: Path):
+        nonlocal best_mtime
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return
         if best_mtime is None or mtime > best_mtime:
             best_mtime = mtime
+
+    for readme in claude_space.glob("*/README.md"):
+        consider(readme)
+    for md in claude_space.glob("*.md"):
+        consider(md)
+    consider(claude_space / "skills-usage-log.json")
+
+    if repo_dir is not None:
+        consider(repo_dir / "README.md")
+        for cfg in (repo_dir / "config").glob("*.json"):
+            consider(cfg)
+        for script in (repo_dir / "scripts").glob("*.py"):
+            consider(script)
+        for widget_jsx in (repo_dir / "widgets").glob("*/index.jsx"):
+            consider(widget_jsx)
+
     return best_mtime
 
 
@@ -710,11 +753,12 @@ def load_session_reset(config_path: Path, now: datetime, last_activity_mtime: fl
                     data["note"] = (
                         f"Auto-reset by status_summary.py on {now.isoformat(timespec='seconds')} - "
                         "the previous session window expired and this is the first tracker "
-                        "activity (a project README update) seen since then, treated as the start "
-                        "of the new session window (full session_window_hours ahead of it, not the "
-                        "prior partial countdown). Estimate based on local file activity, not a "
-                        "true live sync (no session-reset API exists) - overwritten the moment Ian "
-                        "reports a fresh 'resets in Xh Ym.'"
+                        "activity (a ClaudeSpace README/.md touch or a dashboard-visualizer repo "
+                        "edit - see latest_tracker_activity_mtime) seen since then, treated as the "
+                        "start of the new session window (full session_window_hours ahead of it, "
+                        "not the prior partial countdown). Estimate based on local file activity, "
+                        "not a true live sync (no session-reset API exists) - overwritten the "
+                        "moment Ian reports a fresh 'resets in Xh Ym.'"
                     )
                     config_path.write_text(json.dumps(data, indent=2))
                 except OSError:
@@ -1143,7 +1187,7 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
         "daily_goal": load_daily_goal(daily_goal_config_path, totals, needs_ian_count),
         "usage_resets": load_usage_resets(resets_config_path, now),
         "session_reset": load_session_reset(
-            session_reset_config_path, now, latest_tracker_activity_mtime(claude_space)
+            session_reset_config_path, now, latest_tracker_activity_mtime(claude_space, script_dir.parent)
         ),
         "personal_health": load_personal_health(personal_health_config_path, now),
         "sections": sections,
