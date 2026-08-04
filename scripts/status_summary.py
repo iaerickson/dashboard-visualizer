@@ -896,6 +896,58 @@ def load_personal_health(config_path: Path, now: datetime) -> dict | None:
     }
 
 
+def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int) -> dict | None:
+    """Reads config/daily_goal.json, written by the goal-for-day skill (see
+    ClaudeSpace/goal-for-day/SKILL.md) - NOT generated here, same free/
+    deferred pattern as everything else in this file (this script never
+    makes its own LLM judgment calls; deciding what today's actual goal
+    should be is real judgment over full tracker context, the skill's job,
+    same reasoning log-pose's own README gives for the same split).
+
+    What THIS function does mechanically: (1) only returns a goal for
+    TODAY's date - a goal from a previous day is stale, not carried over
+    silently; (2) computes a simple, honest completion proxy by comparing
+    the goal's own baseline snapshot (needs_ian_count/idea total/done_recent
+    at the moment the goal was set) against the current live numbers -
+    "progress" is however many Needs Attention items have since cleared,
+    plus however many ideas have since left the Idea section, plus however
+    many things got marked done, summed. Completed once that sum reaches
+    the goal's own target_count. This is a proxy, not literal task-tracking
+    (it can't know if the SPECIFIC items the goal named got done, only that
+    SOME equivalent amount of real tracker movement happened since) -
+    flagged here the same way every other honest-proxy signal in this file
+    is (away-detection, session-reset auto-roll, etc.)."""
+    if not config_path.exists():
+        return None
+    try:
+        data = json.loads(config_path.read_text(errors="ignore"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not data or "date" not in data or "goal_text" not in data:
+        return None
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    if data["date"] != today_str:
+        return None
+
+    baseline = data.get("baseline", {})
+    target_count = int(data.get("target_count", 1))
+
+    progress = 0
+    progress += max(0, baseline.get("needs_ian_count", needs_ian_count) - needs_ian_count)
+    progress += max(0, baseline.get("idea_total", totals.get("idea", 0)) - totals.get("idea", 0))
+    progress += max(0, totals.get("done_recent", 0) - baseline.get("done_recent", totals.get("done_recent", 0)))
+
+    return {
+        "date": data["date"],
+        "time_budget_minutes": data.get("time_budget_minutes"),
+        "goal_text": data["goal_text"],
+        "target_count": target_count,
+        "progress": min(progress, target_count),
+        "completed": progress >= target_count,
+    }
+
+
 def build_summary(claude_space: Path, script_dir: Path) -> dict:
     index_path = claude_space / "INDEX.md"
     needs_ian_path = claude_space / "NEEDS-IAN.md"
@@ -942,12 +994,16 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
         if item.get("hours_ago") is not None and item["hours_ago"] <= DONE_RECENT_DAYS * 24
     )
 
+    needs_ian_count = count_needs_ian(needs_ian_text)
+    daily_goal_config_path = script_dir.parent / "config" / "daily_goal.json"
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "totals": totals,
         "active_project_names": active_project_names(index_text),
-        "needs_ian_count": count_needs_ian(needs_ian_text),
+        "needs_ian_count": needs_ian_count,
         "most_recent_project": most_recently_touched_project(claude_space),
+        "daily_goal": load_daily_goal(daily_goal_config_path, totals, needs_ian_count),
         "usage_resets": load_usage_resets(resets_config_path, now),
         "session_reset": load_session_reset(
             session_reset_config_path, now, latest_tracker_activity_mtime(claude_space)
