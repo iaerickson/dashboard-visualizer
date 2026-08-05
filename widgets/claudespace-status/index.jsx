@@ -1435,20 +1435,26 @@ const skillsTrayBox = css`
   }
 `
 
-// Fixed-height header zone (2026-08-04) - always the same 168px tall
-// region at the top of `skillsTrayBox`, holding the count + label,
-// whether the box is 84px (collapsed) or 272px (open) wide. Part of the
-// SAME box now, not a separate handle element - see `skillsTrayBox`'s own
-// comment.
+// Content-hugging height now, not a fixed 168px (2026-08-04, real bug) -
+// per Ian, seeing the open panel live: "so much empty space here at the
+// top." The 168px figure was sized back when the label ran vertically
+// (rotated sideways down the collapsed pill's long edge) and needed that
+// much room; once the label went horizontal (see skillsTabLabel's own
+// comment), this zone only ever holds two short lines of text, so the
+// leftover fixed height was just dead air above the hex grid every time
+// the tray opened. Padding-driven height instead - shrinks the open
+// panel's header to what the count+label actually need, and as a side
+// effect makes the COLLAPSED pill shorter and closer to circular, which
+// is arguably closer to the tray's own original "half circle" pitch than
+// the tall capsule this had drifted into.
 const skillsTrayHandleZone = css`
   flex-shrink: 0;
-  height: 168px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 0 6px;
+  gap: 4px;
+  padding: 14px 6px;
 `
 
 // Horizontal now, not rotated (2026-08-04) - per Ian: "skill tray should
@@ -1512,16 +1518,6 @@ const skillsTrayListInner = css`
     background: ${NERV_LINE};
     border-radius: 2px;
   }
-`
-
-const skillsFlyoutHeader = css`
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: ${STATUS_RED};
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid ${RED_LINE};
 `
 
 const skillRowName = css`
@@ -1835,13 +1831,13 @@ const SkillsTab = ({ skills }) => {
       </div>
       <div className={`tray-list ${skillsTrayListGrid}`}>
         <div className={skillsTrayListInner}>
-          {/* Dropped the aggregate "N used" summary (2026-08-04), per Ian:
-              "we dont need to see 1 run next to 9 skills just keep track
-              next to skills when they are run manual or auto" - the
-              per-row manual/auto counts (see formatSkillCounts) already
-              carry that, this header line was a redundant rollup of the
-              same information. */}
-          <div className={skillsFlyoutHeader}>{skills.length} skills</div>
+          {/* Dropped the "N skills" header line entirely now, not just the
+              old "N used" summary (2026-08-04) - per Ian, looking at the
+              open panel live: "dont know if i need to know the 9 skills
+              or have that line there." It was already redundant with the
+              count sitting right above in the handle zone (`skillsTabCount`)
+              every time this panel is open - removing it also closes most
+              of the dead-air gap he flagged at the top of the panel. */}
           <SkillHexGrid skills={skills} />
         </div>
       </div>
