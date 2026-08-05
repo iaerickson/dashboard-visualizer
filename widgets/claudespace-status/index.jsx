@@ -99,6 +99,11 @@ let cardExpanded = false
 const setExpanded = (el, expanded) => {
   cardExpanded = expanded
   if (el) el.classList.toggle("is-expanded", expanded)
+  // Reset the Skill Tray back to its closed pill state on every collapse
+  // to mini mode, not just the first one - see `resetSkillsTray`'s own
+  // comment (defined further down, near the tray's other state helpers)
+  // for the real bug this fixes.
+  if (!expanded) resetSkillsTray(el)
 }
 
 const armCollapse = (el) => {
@@ -1283,6 +1288,27 @@ const resetSkillHexSelection = (wrapEl) => {
   wrapEl.querySelectorAll(".skill-hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
 }
 
+// resetSkillsTray (2026-08-04, real bug) - per Ian: "when it sometimes
+// goes from mini mode to big mode it still pulls out skills in full tray
+// whenever it goes mini mode to big mode, it needs to always start with
+// the little tray half circle." Root cause: `skillsTrayOpen` and the
+// `.is-open` class it drives are never reset by mini-mode collapse -
+// SkillsTab is a permanent DOM child (always rendered, not
+// mount/unmount-gated, see its own comment), so if the tray was left open
+// when big mode collapsed back to mini, the SAME DOM node - `.is-open`
+// class and all - is just what's sitting there hidden, and reappears
+// already open the next time big mode expands. Called from `setExpanded`
+// below every time the card collapses to mini, so the tray is guaranteed
+// to start closed on every fresh expansion, not just the first one.
+const resetSkillsTray = (cardEl) => {
+  if (!cardEl) return
+  const wrapEl = cardEl.querySelector(".skills-tray-wrap")
+  if (!wrapEl) return
+  skillsTrayOpen = false
+  wrapEl.classList.remove("is-open")
+  resetSkillHexSelection(wrapEl)
+}
+
 // Rebuilt a third time (2026-08-04) - per Ian, seeing the two-piece
 // version live: "so much better!! almost there when highlighted the line
 // looks like it goes just a hair above. Also the drop down menu... this
@@ -1685,19 +1711,19 @@ const chunkSkillsIntoColumns = (skills) => {
   return columns
 }
 
-// Solid background added (2026-08-04, real bug) - per Ian, comparing
-// against the reference image: "this still looks like shit." Part of why:
-// the hazard-stripe texture lives on skillsTrayBox's own ::before, behind
-// EVERYTHING in the box - the triangular gaps between hexes (pointy-top
-// tiling always leaves small uncovered slivers at row edges) let that
-// stripe bleed straight through, reading as dirty/patchy next to the
-// reference image's completely clean black. A solid NERV_BG here paints
-// over the stripe for this whole rectangular region, so only the actual
-// hexagon shapes show color - solid black in every gap, same as the
-// reference.
+// Solid rectangular background REMOVED again (2026-08-04) - per Ian,
+// looking at the now-tightly-tiled flat-top grid: "remove back square
+// background here." It was added in an earlier round to stop the
+// hazard-stripe texture from bleeding through the small gaps between
+// hexes (see the two-layer outline/fill work above) - but with hexes now
+// touching edge-to-edge and mostly filled solid, that solid rectangle
+// itself became the more visible problem: a flat, untextured square
+// sitting behind the hex cluster with its own visible edge where it met
+// the tray's textured background. Dropped - the little texture that
+// shows through the tiling's own tiny corner gaps now is far less area
+// than the visible rectangle seam was.
 const skillsHexWrap = css`
   position: relative;
-  background: ${NERV_BG};
   padding: 2px 4px 10px 4px;
 `
 
