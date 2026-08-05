@@ -100,7 +100,7 @@ const setExpanded = (el, expanded) => {
   cardExpanded = expanded
   if (el) el.classList.toggle("is-expanded", expanded)
   // Reset the Skill Tray back to its closed pill state on every collapse
-  // to mini mode, not just the first one - see `resetSkillsTray`'s own
+  // to mini mode, not just the first one - see `resetAllTrays`'s own
   // comment (defined further down, near the tray's other state helpers)
   // for the real bug this fixes.
   if (!expanded) resetAllTrays(el)
@@ -1264,7 +1264,7 @@ const groupNestedIndent = css`
 //     measured-position version tied to resetsSection's bottom border).
 //   - Hover OR click both open the flyout (`&:hover .flyout, &.is-open
 //     .flyout` share one rule; click toggles `.is-open` via
-//     `toggleSkillsTray`).
+//     `toggleTray`).
 //   - The flyout cascades straight down and anchors to the RIGHT edge of
 //     the handle (mirrored from the old left-side anchor for the
 //     right-hand version) - extends further left into open space, never
@@ -1297,7 +1297,7 @@ const toggleTray = (trayId, e) => {
 // half-rendered flicker in his screenshot (the mouse crossing from a tiny
 // hex onto its own overlay panel re-triggers hover state mid-transition).
 // A click now sets one hex "active" (plain DOM class, same imperative
-// pattern as `toggleSkillsTray` above - this file has no React state/hooks
+// pattern as `toggleTray` above - this file has no React state/hooks
 // available), clearing any previously active hex first so only one overlay
 // is ever showing. Clicking the same hex again toggles it back off.
 const toggleSkillHex = (e) => {
@@ -1315,10 +1315,10 @@ const resetSkillHexSelection = (wrapEl) => {
   wrapEl.querySelectorAll(".skill-hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
 }
 
-// resetSkillsTray (2026-08-04, real bug) - per Ian: "when it sometimes
+// resetAllTrays (2026-08-04, real bug) - per Ian: "when it sometimes
 // goes from mini mode to big mode it still pulls out skills in full tray
 // whenever it goes mini mode to big mode, it needs to always start with
-// the little tray half circle." Root cause: `skillsTrayOpen` and the
+// the little tray half circle." Root cause: `activeTrayId` and the
 // `.is-open` class it drives are never reset by mini-mode collapse -
 // SkillsTab is a permanent DOM child (always rendered, not
 // mount/unmount-gated, see its own comment), so if the tray was left open
@@ -1438,7 +1438,7 @@ const skillsTrayBox = css`
      clicking while already hovering set is-open true on top of the hover
      state, and once the mouse then left, hover ended but is-open (set by
      the click) was still true, so the box stayed stuck open with no
-     hover left to explain why. One trigger only now: toggleSkillsTray's
+     hover left to explain why. One trigger only now: toggleTray's
      is-open class, nothing else opens or closes this box. */
   &.is-open {
     width: 272px;
@@ -1697,7 +1697,7 @@ const skillOverlayBody = css`
 // `&:hover .hex-overlay` rule is what produced the illegible, half-
 // rendered flicker in his screenshot (crossing from a tiny hex onto its
 // own overlay re-triggers hover state mid-transition). `toggleSkillHex`
-// (defined up near `toggleSkillsTray`) sets one hex `.is-active` via a
+// (defined up near `toggleTray`) sets one hex `.is-active` via a
 // plain click handler. Leaving the tray entirely calls
 // `resetSkillHexSelection` (wired into `SkillsTab`'s own `onMouseLeave`,
 // alongside the existing `armCollapse` call) so nothing stays pinned open
@@ -2076,9 +2076,9 @@ const SkillHexGrid = ({ skills }) => (
 // design rationale, including why this is now a permanent CHILD of
 // cardOuter (a sibling of cardInner) instead of a conditionally-mounted
 // sibling of the whole card.
-// `skills-tray-wrap` is a plain literal class (same "literal class
+// `tray-wrap` is a plain literal class (same "literal class
 // alongside Emotion's hash" trick used for `.detail`/`.nested` elsewhere)
-// so toggleSkillsTray's click handler can find its own root via
+// so toggleTray's click handler can find its own root via
 // `closest()` without needing a ref of its own.
 // Explicit onMouseEnter/onMouseLeave still needed here (2026-08-04) even
 // though this is now a real DOM child of cardOuter - being DOM-nested
