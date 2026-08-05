@@ -1356,7 +1356,14 @@ const skillsTrayBox = css`
     width: 260px;
     left: -260px;
     border-radius: 10px 0 0 10px;
-    border-color: ${NERV_ORANGE};
+    /* border-color intentionally NOT bumped to full-opacity NERV_ORANGE
+       here anymore (2026-08-04) - per Ian: "outter lines of big mode
+       skill tray are too thick." Same 1px width the whole time; what
+       actually read as "thick" was the jump from NERV_LINE's translucent
+       35% orange (the same weight every other border in this file uses -
+       card's own included) to a fully-opaque, saturated orange, which
+       reads visually heavier at identical pixel width. Left at NERV_LINE
+       now; the box-shadow alone signals "open." */
     box-shadow: 0 4px 28px rgba(0, 0, 0, 0.5);
   }
 
@@ -1370,10 +1377,10 @@ const skillsTrayBox = css`
 `
 
 // Fixed-height header zone (2026-08-04) - always the same 168px tall
-// region at the top of `skillsTrayBox`, holding the count + vertical
-// label, whether the box is 84px (collapsed) or 260px (open) wide. Part
-// of the SAME box now, not a separate handle element - see
-// `skillsTrayBox`'s own comment.
+// region at the top of `skillsTrayBox`, holding the count + label,
+// whether the box is 84px (collapsed) or 260px (open) wide. Part of the
+// SAME box now, not a separate handle element - see `skillsTrayBox`'s own
+// comment.
 const skillsTrayHandleZone = css`
   flex-shrink: 0;
   height: 168px;
@@ -1382,14 +1389,22 @@ const skillsTrayHandleZone = css`
   align-items: center;
   justify-content: center;
   gap: 6px;
+  padding: 0 6px;
 `
 
+// Horizontal now, not rotated (2026-08-04) - per Ian: "skill tray should
+// be horizontal when in big mode." Wraps across two lines ("SKILL"/"TRAY")
+// inside the collapsed 84px-wide handle zone instead of running sideways
+// - normal reading orientation is more legible than rotated text was
+// (the original complaint that got this whole tray resized bigger in the
+// first place), and it doesn't require relocating the tray itself off the
+// left edge, which would reopen the overlap/placement problems already
+// solved for that position.
 const skillsTabLabel = css`
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
   font-size: 11px;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
+  text-align: center;
   color: ${NERV_TEXT_DIM};
 `
 
@@ -1566,7 +1581,6 @@ const SkillRow = ({ skill }) => (
 // size has expanded."
 const SkillsTab = ({ skills }) => {
   if (!skills || skills.length === 0) return null
-  const usedCount = skills.filter((s) => s.call_count > 0).length
   return (
     <div
       className={`skills-tray-wrap ${skillsTrayBox}`}
@@ -1583,9 +1597,13 @@ const SkillsTab = ({ skills }) => {
       </div>
       <div className={`tray-list ${skillsTrayListGrid}`}>
         <div className={skillsTrayListInner}>
-          <div className={skillsFlyoutHeader}>
-            {skills.length} skills · {usedCount} used
-          </div>
+          {/* Dropped the aggregate "N used" summary (2026-08-04), per Ian:
+              "we dont need to see 1 run next to 9 skills just keep track
+              next to skills when they are run manual or auto" - the
+              per-row manual/auto counts (see formatSkillCounts) already
+              carry that, this header line was a redundant rollup of the
+              same information. */}
+          <div className={skillsFlyoutHeader}>{skills.length} skills</div>
           {skills.map((s) => (
             <SkillRow key={s.name} skill={s} />
           ))}
