@@ -541,7 +541,54 @@ def most_recently_touched_project(claude_space: Path) -> dict | None:
     return {"name": best, "hours_ago": round(hours_ago, 1)}
 
 
-def latest_tracker_activity_mtime(claude_space: Path, repo_dir: Path | None = None) -> float | None:
+def latest_scheduled_task_run_epoch(snapshot_path: Path) -> float | None:
+    """Reads config/scheduled_tasks_snapshot.json - a small local cache of
+    Ian's real scheduled-task lastRunAt timestamps (2026-08-05), per Ian:
+    "is there a small file we can write to locally... on any activity after
+    that 5 hr refresh, on first activity whether its me or an automated
+    message, we update the initial time stamp." This is the "automated
+    message" half of that - real data pulled from
+    mcp__scheduled-tasks__list_scheduled_tasks (Cowork's own scheduling
+    system, not a heuristic), not something status_summary.py can query
+    live itself (it's a standalone script, no MCP access at all - only a
+    live Claude session can call that tool). So this file is the honest
+    bridge: refreshed with real lastRunAt data whenever a live session
+    (Claude directly, or - going forward - the scheduled tasks themselves,
+    see overnight-auto-execute/SKILL.md and daily-checkins' own prompt)
+    writes it, then read here like any other local file. Format:
+    {"refreshed_at": "<ISO>", "tasks": [{"taskId": "...", "lastRunAt": "<ISO, UTC, 'Z' suffix>"}]}.
+    Returns the max lastRunAt across all tasks as a plain UNIX epoch float
+    (directly comparable to st_mtime results elsewhere in this file), or
+    None if the snapshot is missing/empty/unparseable - same silent-skip
+    convention every other optional config in this script already uses."""
+    if not snapshot_path.exists():
+        return None
+    try:
+        data = json.loads(snapshot_path.read_text(errors="ignore"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    best_epoch = None
+    for task in data.get("tasks", []):
+        raw = task.get("lastRunAt")
+        if not raw:
+            continue
+        try:
+            # lastRunAt comes from the scheduler as UTC with a "Z" suffix -
+            # fromisoformat needs "+00:00" instead, then .timestamp() gives
+            # a real UNIX epoch (tz-aware datetime converts correctly,
+            # unlike the naive local timestamps used everywhere else here).
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        epoch = dt.timestamp()
+        if best_epoch is None or epoch > best_epoch:
+            best_epoch = epoch
+    return best_epoch
+
+
+def latest_tracker_activity_mtime(
+    claude_space: Path, repo_dir: Path | None = None, scheduled_snapshot_path: Path | None = None
+) -> float | None:
     """Raw max mtime across every project README.md in the tracker - same
     directory walk as most_recently_touched_project above, just exposing the
     timestamp itself rather than a formatted "N hours ago" string. Added
@@ -573,7 +620,26 @@ def latest_tracker_activity_mtime(claude_space: Path, repo_dir: Path | None = No
     see PROCESS.md's Ground Rule on it); and, if repo_dir is given, that
     repo's own README.md, config/*.json, scripts/*.py, and every
     widgets/*/index.jsx - anything actually edited during a live widget
-    session like this one."""
+    session like this one.
+
+    Widened again (2026-08-05), real gap found live: `overnight-auto-execute`
+    and `daily-checkins` both write a report on EVERY real run (Step 4 /
+    the BETA REPORT section) to `usage-scheduler/latest-report.md` and
+    `usage-scheduler/reports/YYYY-MM-DD.md` - a guaranteed, every-single-run
+    trace of real automated activity, and neither path was actually being
+    scanned (`usage-scheduler/latest-report.md` isn't literally named
+    `README.md`, so the `*/README.md` glob above skips it; `reports/*.md`
+    is two directories deep, past what `*.md` at ClaudeSpace's root
+    reaches). Now scanned directly, independent of whether that run also
+    happened to touch skills-usage-log.json.
+
+    `scheduled_snapshot_path` (2026-08-05) is the other half of the same
+    round - per Ian: "is there a small file we can write to locally...
+    on any activity after that 5 hr refresh, on first activity whether
+    its me or an automated message, we update the initial time stamp."
+    See `latest_scheduled_task_run_epoch`'s own docstring for why this is
+    a separate cache file rather than a live query - this script has no
+    MCP access to call the scheduling system directly."""
     best_mtime = None
 
     def consider(path: Path):
@@ -590,6 +656,9 @@ def latest_tracker_activity_mtime(claude_space: Path, repo_dir: Path | None = No
     for md in claude_space.glob("*.md"):
         consider(md)
     consider(claude_space / "skills-usage-log.json")
+    consider(claude_space / "usage-scheduler" / "latest-report.md")
+    for report in claude_space.glob("usage-scheduler/reports/*.md"):
+        consider(report)
 
     if repo_dir is not None:
         consider(repo_dir / "README.md")
@@ -599,6 +668,11 @@ def latest_tracker_activity_mtime(claude_space: Path, repo_dir: Path | None = No
             consider(script)
         for widget_jsx in (repo_dir / "widgets").glob("*/index.jsx"):
             consider(widget_jsx)
+
+    if scheduled_snapshot_path is not None:
+        scheduled_epoch = latest_scheduled_task_run_epoch(scheduled_snapshot_path)
+        if scheduled_epoch is not None and (best_mtime is None or scheduled_epoch > best_mtime):
+            best_mtime = scheduled_epoch
 
     return best_mtime
 
@@ -1340,6 +1414,7 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
     session_reset_config_path = script_dir.parent / "config" / "session_reset.json"
     personal_health_config_path = script_dir.parent / "config" / "last_break.json"
     catalog_path = script_dir.parent / "config" / "project_catalog.json"
+    scheduled_snapshot_path = script_dir.parent / "config" / "scheduled_tasks_snapshot.json"
 
     index_text = index_path.read_text(errors="ignore") if index_path.exists() else ""
     needs_ian_text = needs_ian_path.read_text(errors="ignore") if needs_ian_path.exists() else ""
@@ -1400,7 +1475,9 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
         ),
         "usage_resets": load_usage_resets(resets_config_path, now),
         "session_reset": load_session_reset(
-            session_reset_config_path, now, latest_tracker_activity_mtime(claude_space, script_dir.parent)
+            session_reset_config_path,
+            now,
+            latest_tracker_activity_mtime(claude_space, script_dir.parent, scheduled_snapshot_path),
         ),
         "personal_health": load_personal_health(personal_health_config_path, now),
         "sections": sections,
