@@ -1141,10 +1141,29 @@ SKILL_CALLS_RE = re.compile(r"^calls:\s*(.+)$", re.MULTILINE)
 # (`overflow-y: auto`) once it's open, so there's no real UI reason to cut
 # a description short at all - 160 was sized for the old cramped hover
 # tooltip this overlay replaced several rounds ago, never revisited since.
-# Still a cap, not truly unlimited - 600 comfortably fits every real
-# description in this workspace today in full while still guarding
-# against a genuinely pathological one blowing out the panel.
-SKILL_DESC_MAX_CHARS = 600
+#
+# No longer a real display cap at all (2026-08-05, real bug found live) -
+# per Ian, seeing `time-assessor`'s own description cut off mid-sentence
+# with a trailing "…": "i dont like the ... in the summary if we can have
+# scroll here we should rewrite summaries so they are complete ideas and
+# not trail off." The 600-char figure above was already wrong the day it
+# was set - claimed to "comfortably fit every real description... in full"
+# but `time-assessor`'s real description (the one in Ian's screenshot) was
+# already longer than that. Checked every real SKILL.md `description:` in
+# this workspace: each one is already written as a complete, well-formed
+# paragraph ending in a real sentence - the "trailing off" was never a
+# writing-quality problem in the descriptions themselves, purely an
+# artifact of this file cutting them short. The overlay scrolls specifically
+# so a long description has somewhere to go instead of needing to be
+# shortened - so stop shortening it.
+#
+# SKILL_DESC_HARD_SAFETY_CAP is NOT the same kind of limit - it only
+# exists to stop a genuinely pathological SKILL.md (a malformed file with
+# megabytes of accidental content landing in its description line) from
+# blowing out the panel, sits far above any real description ever written
+# here, and marks itself as truncated explicitly rather than trailing off
+# with a bare "…" that reads like a natural, if long, complete thought.
+SKILL_DESC_HARD_SAFETY_CAP = 4000
 
 
 def load_skills_catalog(claude_space: Path) -> list:
@@ -1209,8 +1228,8 @@ def load_skills_catalog(claude_space: Path) -> list:
         name = name_match.group(1).strip()
         desc_match = SKILL_DESC_RE.search(text)
         description = desc_match.group(1).strip() if desc_match else ""
-        if len(description) > SKILL_DESC_MAX_CHARS:
-            description = description[:SKILL_DESC_MAX_CHARS].rsplit(" ", 1)[0] + "…"
+        if len(description) > SKILL_DESC_HARD_SAFETY_CAP:
+            description = description[:SKILL_DESC_HARD_SAFETY_CAP].rsplit(" ", 1)[0] + " [truncated - malformed SKILL.md?]"
         calls_match = SKILL_CALLS_RE.search(text)
         calls = [c.strip() for c in calls_match.group(1).split(",") if c.strip()] if calls_match else []
         # updated_hours_ago (2026-08-05) - per Ian: "provide... latest
