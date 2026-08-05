@@ -1658,8 +1658,12 @@ const skillCallsLine = css`
 // new skill added to the catalog automatically lands in the next open
 // slot (or starts a new row) with no per-skill layout code anywhere in
 // this file.
-const HEX_W = 62
-const HEX_H = 72
+// Bumped slightly (2026-08-04, from 62x72) - per Ian, comparing live
+// against the reference image directly: "i want it to look like this."
+// A little more room per hex for the bolder, triangle-flanked label below
+// to actually read clearly, same true-hexagon ratio as before.
+const HEX_W = 66
+const HEX_H = 76
 const SKILL_HEX_ROW_SIZE = 3
 // Solid near-black for text ON a filled red hex (2026-08-04) - NERV_BG
 // itself is translucent (`rgba(10, 9, 8, 0.92)`), fine for a background
@@ -1675,8 +1679,19 @@ const chunkSkillsIntoRows = (skills) => {
   return rows
 }
 
+// Solid background added (2026-08-04, real bug) - per Ian, comparing
+// against the reference image: "this still looks like shit." Part of why:
+// the hazard-stripe texture lives on skillsTrayBox's own ::before, behind
+// EVERYTHING in the box - the triangular gaps between hexes (pointy-top
+// tiling always leaves small uncovered slivers at row edges) let that
+// stripe bleed straight through, reading as dirty/patchy next to the
+// reference image's completely clean black. A solid NERV_BG here paints
+// over the stripe for this whole rectangular region, so only the actual
+// hexagon shapes show color - solid black in every gap, same as the
+// reference.
 const skillsHexWrap = css`
   position: relative;
+  background: ${NERV_BG};
   padding: 2px 4px 10px 4px;
 `
 
@@ -1716,17 +1731,26 @@ const skillHexCell = css`
   }
 `
 
+// Border thinned to 1px, from 2px (2026-08-04) - per Ian, against the
+// reference image: "i want it to look like this." The reference's hex
+// grid reads as a crisp, uniformly thin line even at the seams where two
+// hexes touch - the 2px version (chosen back when the ask was "thick
+// borders between them," before this reference image existed) doubled up
+// at every touching edge into a visibly chunkier, uneven-looking seam.
+// 1px on each tile still doubles to ~2px at a shared edge, close to the
+// reference's own weight, without the tile's OWN outline reading as heavy
+// in isolation the way 2px did.
 const skillHexTile = css`
   width: 100%;
   height: 100%;
   box-sizing: border-box;
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  border: 2px solid ${STATUS_RED};
+  border: 1px solid ${STATUS_RED};
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 1px;
   transition: background 0.2s ease, border-color 0.2s ease;
 
   .skill-hex-cell:hover & {
@@ -1734,17 +1758,25 @@ const skillHexTile = css`
   }
 `
 
-const skillHexCount = css`
-  font-size: 15px;
-  font-weight: 700;
+// Triangle glyphs replacing the plain call-count digit (2026-08-04) - per
+// Ian, pointing directly at the MAGI reference image's own hex content:
+// "i want it to look like this." That image flanks each cell's label with
+// a solid up-triangle above and down-triangle below, not a number - real
+// call-count data still lives one click away in the overlay
+// (`formatSkillCounts`), this is purely the tile FACE now matching that
+// specific visual language instead of a half-borrowed version of it.
+const skillHexTriangle = css`
+  font-size: 9px;
+  line-height: 1;
 `
 
 const skillHexLabel = css`
-  font-size: 8px;
+  font-size: 9px;
+  font-weight: 700;
   letter-spacing: 0.02em;
   text-align: center;
   line-height: 1.15;
-  max-width: 48px;
+  max-width: 52px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1777,11 +1809,14 @@ const SkillHex = ({ skill }) => {
   return (
     <div className={`skill-hex-cell ${skillHexCell}`} onClick={toggleSkillHex}>
       <div className={skillHexTile} style={{ background: used ? STATUS_RED : NERV_BG }}>
-        <span className={skillHexCount} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
-          {used ? skill.call_count : "–"}
+        <span className={skillHexTriangle} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
+          ▲
         </span>
         <span className={skillHexLabel} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
           {skill.name}
+        </span>
+        <span className={skillHexTriangle} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
+          ▼
         </span>
       </div>
       {/* Sibling of skillHexTile, not a child of it (2026-08-04, real bug -
