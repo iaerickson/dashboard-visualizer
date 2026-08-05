@@ -1742,31 +1742,56 @@ const skillHexCell = css`
   }
 `
 
-// Border thinned to 1px, from 2px (2026-08-04) - per Ian, against the
-// reference image: "i want it to look like this." The reference's hex
-// grid reads as a crisp, uniformly thin line even at the seams where two
-// hexes touch - the 2px version (chosen back when the ask was "thick
-// borders between them," before this reference image existed) doubled up
-// at every touching edge into a visibly chunkier, uneven-looking seam.
-// 1px on each tile still doubles to ~2px at a shared edge, close to the
-// reference's own weight, without the tile's OWN outline reading as heavy
-// in isolation the way 2px did.
-const skillHexTile = css`
+// Two-layer outline/fill split (2026-08-04, real bug found live) - per
+// Ian: "can the hex have slight red outline" - looking at the last
+// screenshot, only the flat top/bottom edges of each unfilled hex showed
+// any visible border at all; the four slanted edges were essentially
+// invisible. Root cause: `border` + `clip-path` on the SAME element is a
+// known CSS trap - the browser paints the border first as part of the
+// box, THEN clips the whole result (fill AND border) to the polygon. On
+// the flat top/bottom edges the polygon line exactly coincides with the
+// box's own edge, so the full border survives; everywhere else (every
+// slanted edge) the polygon cuts diagonally straight through the middle
+// of the border's own stroke width, leaving only a sliver - thin enough
+// at 1px that it reads as gone. `border` never actually gives a clean
+// outline on a clip-path'd shape at this scale.
+//
+// Fixed with two stacked, independently clipped layers instead of a
+// border at all: `skillHexOutline` (this cell's direct child) is a solid
+// STATUS_RED hexagon at full size; `skillHexFill` sits inset a couple px
+// on every side, clipped to the SAME polygon (percentages recompute
+// automatically for the smaller box), and holds the real fill color -
+// STATUS_RED again for a used skill (reads as fully solid, exactly like
+// the reference's solid cells, since outline and fill match), or NERV_BG
+// for a never-run one (the red outer layer shows through as a crisp,
+// uniform ring all the way around - the actual "slight red outline" Ian
+// asked for, working on every edge, not just the flat ones).
+const skillHexOutline = css`
   width: 100%;
   height: 100%;
   box-sizing: border-box;
   clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
-  border: 1px solid ${STATUS_RED};
+  background: ${STATUS_RED};
+  position: relative;
+
+  .skill-hex-cell:hover & {
+    background: ${NERV_TEXT};
+  }
+`
+
+const HEX_OUTLINE_WIDTH = 2
+
+const skillHexFill = css`
+  position: absolute;
+  inset: ${HEX_OUTLINE_WIDTH}px;
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 1px;
-  transition: background 0.2s ease, border-color 0.2s ease;
-
-  .skill-hex-cell:hover & {
-    border-color: ${NERV_TEXT};
-  }
+  padding: 0 4px;
+  transition: background 0.2s ease;
 `
 
 // Triangle glyphs replacing the plain call-count digit (2026-08-04) - per
@@ -1779,23 +1804,35 @@ const skillHexTile = css`
 const skillHexTriangle = css`
   font-size: 9px;
   line-height: 1;
+  flex-shrink: 0;
 `
 
-// max-width bumped 52px -> 60px (2026-08-04) - the flat-top reorientation
-// gives the label more literal horizontal room to work with (a flat-top
-// hex's full width is usable across its vertical center, unlike pointy-
-// top's narrower waist), so slightly less of each skill's name gets
-// truncated with an ellipsis than before.
+// Wraps onto multiple lines now instead of truncating with an ellipsis
+// (2026-08-04, real bug) - per Ian: "have full displaced skill text if it
+// needs new line in the hex no overlap." A flat-top hex has full usable
+// width across its vertical middle, and the vertical stack here (two
+// triangles + this label) only uses roughly half the hex's own height
+// even at 3 wrapped lines, so there was always room for the FULL name -
+// `white-space: nowrap` + `text-overflow: ellipsis` was cutting names
+// short for no real space reason. `-webkit-line-clamp: 3` caps it at
+// three wrapped lines (with its own ellipsis as a last-resort safety net,
+// not the normal case) so a pathologically long future skill name still
+// can't overflow the hex and overlap its neighbors - "no overlap," same
+// as asked, just handled by capping instead of truncating on line one.
 const skillHexLabel = css`
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-align: center;
-  line-height: 1.15;
-  max-width: 60px;
+  line-height: 1.2;
+  max-width: 50px;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 `
 
 const skillHexOverlay = css`
@@ -1824,18 +1861,20 @@ const SkillHex = ({ skill }) => {
   const used = skill.call_count > 0
   return (
     <div className={`skill-hex-cell ${skillHexCell}`} onClick={toggleSkillHex}>
-      <div className={skillHexTile} style={{ background: used ? STATUS_RED : NERV_BG }}>
-        <span className={skillHexTriangle} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
-          ▲
-        </span>
-        <span className={skillHexLabel} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
-          {skill.name}
-        </span>
-        <span className={skillHexTriangle} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
-          ▼
-        </span>
+      <div className={skillHexOutline}>
+        <div className={skillHexFill} style={{ background: used ? STATUS_RED : NERV_BG }}>
+          <span className={skillHexTriangle} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
+            ▲
+          </span>
+          <span className={skillHexLabel} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
+            {skill.name}
+          </span>
+          <span className={skillHexTriangle} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
+            ▼
+          </span>
+        </div>
       </div>
-      {/* Sibling of skillHexTile, not a child of it (2026-08-04, real bug -
+      {/* Sibling of skillHexOutline, not a child of it (2026-08-04, real bug -
           see the comment above this whole section) - a clip-path'd parent
           traps this overlay's z-index in a local stacking context, which is
           exactly what made it render illegible/hidden behind later hexes. */}
@@ -2485,12 +2524,18 @@ const DailyGoals = ({ dailyGoal }) => {
   // the point is a visible sense of progress through today's actual goals,
   // not a shrinking list.
   const goals = [...rawGoals].sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0))
+  // Header count bumps down as items complete (2026-08-04 follow-up), per
+  // Ian: "when a goal is completed it the daily goal count should bump
+  // down." Was `goals.length` (static total) - now the count of what's
+  // still actually open, same "this number should move as real progress
+  // happens" spirit as needs_ian_count elsewhere in this file.
+  const remainingCount = goals.filter((g) => !g.completed).length
 
   return (
     <div className={collapsibleSection}>
       <div className={sectionHeader}>
         <span className={sectionHeaderLabel}><IconGoal /> Daily Goals</span>
-        <span className={sectionHeaderCount}>{goals.length}</span>
+        <span className={sectionHeaderCount}>{remainingCount}</span>
       </div>
       <div className={`nested ${nestedList}`}>
         <div className={`${nestedInner} ${scrollList}`}>
@@ -2571,7 +2616,17 @@ const AttentionEntryRow = ({ entry, indent }) => (
 // `formatGoalDetail` below just joins whichever of detail/current_section/
 // context are present into one readable block instead of three separate
 // hover targets.
-const goalPrompt = (title, detail) =>
+// requires_code destination note (2026-08-04 follow-up), per Ian: "it
+// should specify if it should be pasted into a regular thread or code if
+// it requires code or plugins." requires_code comes from status_summary.py
+// (see load_daily_goal's own comment) - True when the goal's named project
+// is a real repo under `../Projects/`, per PROCESS.md's own code-vs-tracker
+// split. Stated plainly up front so pasting this into the wrong surface
+// isn't discovered mid-task.
+const goalPrompt = (title, detail, requiresCode) =>
+  (requiresCode
+    ? `This is real code work — paste this into a Code tab session (or Claude Code), not a regular chat thread. `
+    : `This is regular tracker/skill work — paste this into a normal Claude/Cowork thread, no code environment needed. `) +
   `Help work on today's Commandspace goal: ${title}.` +
   (detail ? ` ${detail}` : "") +
   ` Before starting: read PROCESS.md and PHILOSOPHY.md in this folder for the ` +
@@ -2582,6 +2637,10 @@ const formatGoalDetail = (goal) => {
   if (goal.detail) parts.push(goal.detail)
   if (goal.current_section) parts.push(`Currently in: ${goal.current_section}.`)
   if (goal.context) parts.push(goal.context)
+  // requires_code tag (2026-08-04 follow-up) - visible in the hover detail
+  // too, not just baked into the copied prompt, so the destination is known
+  // before clicking, not just after.
+  parts.push(goal.requires_code ? "Code tab (real code work)." : "Regular thread.")
   return parts.join(" ")
 }
 
@@ -2604,7 +2663,7 @@ const GoalRow = ({ goal, completed }) => {
       }
       onClick={(e) => {
         e.stopPropagation()
-        copyPrompt(goalPrompt(goal.title, goal.detail), e.currentTarget)
+        copyPrompt(goalPrompt(goal.title, goal.detail, goal.requires_code), e.currentTarget)
       }}
     >
       <div className={attentionRowTop}>
