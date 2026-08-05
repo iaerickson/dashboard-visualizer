@@ -103,7 +103,7 @@ const setExpanded = (el, expanded) => {
   // to mini mode, not just the first one - see `resetSkillsTray`'s own
   // comment (defined further down, near the tray's other state helpers)
   // for the real bug this fixes.
-  if (!expanded) resetSkillsTray(el)
+  if (!expanded) resetAllTrays(el)
 }
 
 const armCollapse = (el) => {
@@ -1269,13 +1269,24 @@ const groupNestedIndent = css`
 //     the handle (mirrored from the old left-side anchor for the
 //     right-hand version) - extends further left into open space, never
 //     back over the card.
-let skillsTrayOpen = false
+let activeTrayId = null
 
-const toggleSkillsTray = (e) => {
+const toggleTray = (trayId, e) => {
   e.stopPropagation()
-  skillsTrayOpen = !skillsTrayOpen
-  const wrapEl = e.currentTarget.closest(".skills-tray-wrap")
-  if (wrapEl) wrapEl.classList.toggle("is-open", skillsTrayOpen)
+  const wrapEl = e.currentTarget.closest(".tray-wrap")
+  if (!wrapEl) return
+  const opening = activeTrayId !== trayId
+  if (activeTrayId && activeTrayId !== trayId) {
+    const container = wrapEl.parentElement
+    const otherEl = container && container.querySelector(`.tray-wrap[data-tray-id="${activeTrayId}"]`)
+    if (otherEl) {
+      otherEl.classList.remove("is-open")
+      resetSkillHexSelection(otherEl)
+    }
+  }
+  wrapEl.classList.toggle("is-open", opening)
+  if (!opening) resetSkillHexSelection(wrapEl)
+  activeTrayId = opening ? trayId : null
 }
 
 // toggleSkillHex/resetSkillHexSelection (2026-08-04) - per Ian: "when you
@@ -1292,7 +1303,7 @@ const toggleSkillsTray = (e) => {
 const toggleSkillHex = (e) => {
   e.stopPropagation()
   const cell = e.currentTarget
-  const wrapEl = cell.closest(".skills-tray-wrap")
+  const wrapEl = cell.closest(".tray-wrap")
   if (!wrapEl) return
   const wasActive = cell.classList.contains("is-active")
   wrapEl.querySelectorAll(".skill-hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
@@ -1316,13 +1327,13 @@ const resetSkillHexSelection = (wrapEl) => {
 // already open the next time big mode expands. Called from `setExpanded`
 // below every time the card collapses to mini, so the tray is guaranteed
 // to start closed on every fresh expansion, not just the first one.
-const resetSkillsTray = (cardEl) => {
+const resetAllTrays = (cardEl) => {
   if (!cardEl) return
-  const wrapEl = cardEl.querySelector(".skills-tray-wrap")
-  if (!wrapEl) return
-  skillsTrayOpen = false
-  wrapEl.classList.remove("is-open")
-  resetSkillHexSelection(wrapEl)
+  cardEl.querySelectorAll(".tray-wrap").forEach((wrapEl) => {
+    wrapEl.classList.remove("is-open")
+    resetSkillHexSelection(wrapEl)
+  })
+  activeTrayId = null
 }
 
 // Rebuilt a third time (2026-08-04) - per Ian, seeing the two-piece
@@ -2086,7 +2097,8 @@ const SkillsTab = ({ skills }) => {
   if (!skills || skills.length === 0) return null
   return (
     <div
-      className={`skills-tray-wrap ${skillsTrayBox}`}
+      className={`tray-wrap ${skillsTrayBox}`}
+      data-tray-id="skills"
       onMouseEnter={() => { if (cardNode) disarmCollapse(cardNode) }}
       onMouseLeave={(e) => {
         if (cardNode) armCollapse(cardNode)
@@ -2097,7 +2109,7 @@ const SkillsTab = ({ skills }) => {
           (2026-08-04) - a click anywhere in the now-unified box would
           otherwise bubble up and toggle the tray shut while someone's
           just trying to interact with a row in the open skill list. */}
-      <div className={skillsTrayHandleZone} onClick={toggleSkillsTray}>
+      <div className={skillsTrayHandleZone} onClick={(e) => toggleTray("skills", e)}>
         <span className={skillsTabCount}>{skills.length}</span>
         <span className={skillsTabLabel}>SKILL TRAY</span>
       </div>
