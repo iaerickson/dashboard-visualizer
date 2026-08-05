@@ -1270,17 +1270,17 @@ const toggleSkillsTray = (e) => {
 // is ever showing. Clicking the same hex again toggles it back off.
 const toggleSkillHex = (e) => {
   e.stopPropagation()
-  const tile = e.currentTarget
-  const wrapEl = tile.closest(".skills-tray-wrap")
+  const cell = e.currentTarget
+  const wrapEl = cell.closest(".skills-tray-wrap")
   if (!wrapEl) return
-  const wasActive = tile.classList.contains("is-active")
-  wrapEl.querySelectorAll(".skill-hex-tile.is-active").forEach((el) => el.classList.remove("is-active"))
-  if (!wasActive) tile.classList.add("is-active")
+  const wasActive = cell.classList.contains("is-active")
+  wrapEl.querySelectorAll(".skill-hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
+  if (!wasActive) cell.classList.add("is-active")
 }
 
 const resetSkillHexSelection = (wrapEl) => {
   if (!wrapEl) return
-  wrapEl.querySelectorAll(".skill-hex-tile.is-active").forEach((el) => el.classList.remove("is-active"))
+  wrapEl.querySelectorAll(".skill-hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
 }
 
 // Rebuilt a third time (2026-08-04) - per Ian, seeing the two-piece
@@ -1619,17 +1619,37 @@ const skillCallsLine = css`
 // rendered flicker in his screenshot (crossing from a tiny hex onto its
 // own overlay re-triggers hover state mid-transition). `toggleSkillHex`
 // (defined up near `toggleSkillsTray`) sets one hex `.is-active` via a
-// plain click handler - `skillHexTile`'s own `&.is-active .hex-overlay`
-// rule is the only thing that reveals an overlay now. Leaving the tray
-// entirely calls `resetSkillHexSelection` (wired into `SkillsTab`'s own
-// `onMouseLeave`, alongside the existing `armCollapse` call) so nothing
-// stays pinned open once the mouse is gone.
+// plain click handler. Leaving the tray entirely calls
+// `resetSkillHexSelection` (wired into `SkillsTab`'s own `onMouseLeave`,
+// alongside the existing `armCollapse` call) so nothing stays pinned open
+// once the mouse is gone.
 //
-// `skillsHexWrap` still carries `position: relative` for the SAME reason
-// as before - `skillHexOverlay` is `position: absolute; inset: 0` on a
-// tile that's itself left `static`, so it skips past the tiny hex and
-// binds to this wrap instead, covering the whole grid rather than just
-// its own cell.
+// `skillHexCell`/`skillHexTile` split (2026-08-04, second real bug found
+// live, same round as the click-selection fix above) - clicking a hex DID
+// select it, but the overlay rendered illegible and half-hidden behind
+// LATER hexes in the grid. Root cause: `clip-path` (on `skillHexTile`)
+// establishes its own CSS stacking context, same as `opacity`/`transform`/
+// `filter` do - so nesting the overlay INSIDE the clipped tile scoped its
+// `z-index: 30` to that one tile's own local context, not the tray as a
+// whole. Every OTHER hex tile (each also `clip-path`-isolated) still
+// painted in normal DOM order on top of it, since z-index only wins
+// battles within a shared stacking context - hexes from later rows won
+// that fight and covered the overlay's text. Fixed by splitting each
+// hex into an unclipped `skillHexCell` wrapper (plain, no clip-path, no
+// stacking context of its own) holding two SIBLINGS: the visual
+// `skillHexTile` (still clipped, still what's visibly clicked) and the
+// overlay - since the overlay is no longer a DESCENDANT of anything
+// clip-path'd, it isn't trapped in a local stacking context and its
+// `z-index: 30` finally competes at `skillsHexWrap`'s level, correctly
+// painting over every hex regardless of row. `.is-active` now toggles on
+// the cell (via `toggleSkillHex`), not the tile, so the CSS descendant
+// selector (`&.is-active .hex-overlay`) still reaches the overlay.
+//
+// `skillsHexWrap` still carries `position: relative` for the SAME layout
+// reason as before - `skillHexOverlay` is `position: absolute; inset: 0`
+// and `skillHexCell` is deliberately left `static` (unpositioned), so the
+// overlay skips past it and binds to this wrap instead, covering the
+// whole grid rather than just its own cell.
 //
 // This is also the pre-planned slot system Ian asked for ("preplan a grid
 // layout system for skills to slot in when we add more, it should be easy
@@ -1678,11 +1698,28 @@ const skillHexRow = css`
   }
 `
 
-const skillHexTile = css`
+// Unclipped wrapper (2026-08-04) - see the big comment above for why this
+// split exists. Deliberately no `clip-path`, `transform`, `opacity`,
+// `filter`, or `position` here - any of those would re-create the same
+// stacking-context trap this split exists to avoid, or (for `position`)
+// would make this cell itself the overlay's containing block instead of
+// letting it skip through to `skillsHexWrap`.
+const skillHexCell = css`
   width: ${HEX_W}px;
   height: ${HEX_H}px;
-  box-sizing: border-box;
   flex-shrink: 0;
+  cursor: pointer;
+
+  &.is-active .hex-overlay {
+    opacity: 1;
+    pointer-events: auto;
+  }
+`
+
+const skillHexTile = css`
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
   border: 2px solid ${STATUS_RED};
   display: flex;
@@ -1690,15 +1727,10 @@ const skillHexTile = css`
   align-items: center;
   justify-content: center;
   gap: 2px;
-  cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease;
 
-  &:hover {
+  .skill-hex-cell:hover & {
     border-color: ${NERV_TEXT};
-  }
-  &.is-active .hex-overlay {
-    opacity: 1;
-    pointer-events: auto;
   }
 `
 
@@ -1743,17 +1775,19 @@ const skillHexOverlay = css`
 const SkillHex = ({ skill }) => {
   const used = skill.call_count > 0
   return (
-    <div
-      className={`skill-hex-tile ${skillHexTile}`}
-      onClick={toggleSkillHex}
-      style={{ background: used ? STATUS_RED : NERV_BG }}
-    >
-      <span className={skillHexCount} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
-        {used ? skill.call_count : "–"}
-      </span>
-      <span className={skillHexLabel} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
-        {skill.name}
-      </span>
+    <div className={`skill-hex-cell ${skillHexCell}`} onClick={toggleSkillHex}>
+      <div className={skillHexTile} style={{ background: used ? STATUS_RED : NERV_BG }}>
+        <span className={skillHexCount} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
+          {used ? skill.call_count : "–"}
+        </span>
+        <span className={skillHexLabel} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
+          {skill.name}
+        </span>
+      </div>
+      {/* Sibling of skillHexTile, not a child of it (2026-08-04, real bug -
+          see the comment above this whole section) - a clip-path'd parent
+          traps this overlay's z-index in a local stacking context, which is
+          exactly what made it render illegible/hidden behind later hexes. */}
       <div className={`hex-overlay ${skillHexOverlay}`}>
         <div className={skillRowName} style={{ fontSize: 13 }}>{skill.name}</div>
         <div className={skillRowMeta} style={{ whiteSpace: "normal", marginTop: 2 }}>
