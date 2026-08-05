@@ -153,8 +153,24 @@ const toggleExpanded = (e) => {
 // measurement needed at all anymore.
 let cardNode = null
 
+// ClaudeSpace path now passed explicitly (2026-08-05, real fragility fix) -
+// per Ian's screenshot of the widget itself erroring "couldn't read
+// tracker: ClaudeSpace folder not found at /Users/ianerickson/Desktop/
+// Claude[Space]." status_summary.py falls back to `Path.home() /
+// "Desktop" / "ClaudeSpace"` when no argument is given (see its own
+// `claude_space = ...` line) - that resolves correctly under a normal
+// shell, but this script's absolute path just above is ALREADY hardcoded
+// rather than left to resolve at runtime, and report-viewer's own
+// `command` (see that widget's index.jsx) already passes this same path
+// explicitly rather than relying on the fallback - this file was the one
+// inconsistent case. Removing the dependency on `Path.home()` resolving
+// correctly in whatever environment Übersicht actually runs its `command`
+// shell in closes off a real, if intermittent, failure mode rather than
+// just hoping HOME is always set the way a normal Terminal session sets
+// it.
 export const command =
-  "python3 '/Users/ianerickson/Desktop/Projects/dashboard-visualizer/scripts/status_summary.py'"
+  "python3 '/Users/ianerickson/Desktop/Projects/dashboard-visualizer/scripts/status_summary.py' " +
+  "'/Users/ianerickson/Desktop/ClaudeSpace'"
 
 // The widget reads INDEX.md/NEEDS-IAN.md/READMEs directly, so anything
 // that edits those files — including a log-pose run — shows up here
@@ -1694,8 +1710,12 @@ const skillCallsLine = css`
 // width is now the LONGER dimension (a regular flat-top hexagon has
 // width = height * 2/sqrt(3), the inverse of pointy-top's ratio), so W/H
 // swap along with the shape itself.
-const HEX_W = 78
-const HEX_H = 68
+// Sized up again (2026-08-05, 78x68 -> 90x78), per Ian: "can we size up
+// the size of all the hexagons a little bit." Same ratio, just bigger -
+// 3 columns still fit comfortably inside the tray's ~244px available
+// width (90 + 2 * (90*0.75) = 225px).
+const HEX_W = 90
+const HEX_H = 78
 const SKILL_HEX_COL_SIZE = 3
 // Solid near-black for text ON a filled red hex (2026-08-04) - NERV_BG
 // itself is translucent (`rgba(10, 9, 8, 0.92)`), fine for a background
