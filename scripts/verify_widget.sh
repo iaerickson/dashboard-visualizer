@@ -104,6 +104,50 @@ for WIDGET_JSX in "$REPO_DIR"/widgets/*/index.jsx; do
   fi
 done
 
+# --- 1.6. No literal backticks inside /* ... */ CSS comments living
+# INSIDE a css`...` template literal (2026-08-04, real bug hit TWICE
+# live) - this file's `css` blocks are JS template literals; a
+# `/* ... */` CSS comment written inside one is still literal
+# template-literal source, so any backtick character inside it (e.g.
+# writing `${NERV_BG}` as inline-code styling in prose) gets parsed as a
+# real template-literal interpolation/terminator, not comment text -
+# breaks the file with a confusing "Missing semicolon" error nowhere near
+# the real cause. Babel's parser (step 1) DOES catch the resulting syntax
+# error, but only after burning a round confused about why - this check
+# points straight at the actual line instead.
+#
+# Scoped specifically to css`...` bodies (2026-08-04, fixed same day a
+# first, too-broad version of this check shipped) - a first pass grepped
+# EVERY /* */ block in the whole file, which false-positived on ordinary
+# JSX comments (`{/* ... */}`) elsewhere that happen to mention a
+# backtick-wrapped CSS selector in prose (e.g. "beats tinyStat's own
+# `& strong` rule") - those live in plain JS, not inside a template
+# literal, so a backtick there is completely harmless. This version only
+# scans the text between each `css\`` and its OWN closing backtick (none
+# of these css blocks use nested template literals, so the next literal
+# backtick after `css\`` reliably is that block's own close).
+for WIDGET_JSX in "$REPO_DIR"/widgets/*/index.jsx; do
+  [ -e "$WIDGET_JSX" ] || continue
+  WIDGET_NAME="$(basename "$(dirname "$WIDGET_JSX")")"
+  python3 - "$WIDGET_JSX" "$WIDGET_NAME" << 'EOF' || OVERALL_OK=1
+import re, sys
+path, name = sys.argv[1], sys.argv[2]
+src = open(path).read()
+bad = False
+for css_match in re.finditer(r"css`(.*?)`", src, re.DOTALL):
+    body = css_match.group(1)
+    body_start = css_match.start(1)
+    for comment_match in re.finditer(r"/\*.*?\*/", body, re.DOTALL):
+        if chr(96) in comment_match.group(0):
+            line_no = src.count("\n", 0, body_start + comment_match.start()) + 1
+            print(f"[FAIL] {name}/index.jsx has a backtick inside a /* */ comment inside a css` block, starting near line {line_no} - breaks template-literal parsing, reword without backticks")
+            bad = True
+if not bad:
+    print(f"[ok] {name}/index.jsx has no backticks inside CSS-template comments")
+sys.exit(1 if bad else 0)
+EOF
+done
+
 # --- 2. status_summary.py runs clean ---
 if python3 "$REPO_DIR/scripts/status_summary.py" "$CLAUDE_SPACE" > /dev/null; then
   echo "[ok] status_summary.py runs clean against $CLAUDE_SPACE"

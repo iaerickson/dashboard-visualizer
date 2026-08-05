@@ -1353,8 +1353,8 @@ const skillsTrayBox = css`
      as a floating panel. */
   &:hover,
   &.is-open {
-    width: 260px;
-    left: -260px;
+    width: 272px;
+    left: -272px;
     border-radius: 10px 0 0 10px;
     /* border-color intentionally NOT bumped to full-opacity NERV_ORANGE
        here anymore (2026-08-04) - per Ian: "outter lines of big mode
@@ -1365,6 +1365,33 @@ const skillsTrayBox = css`
        reads visually heavier at identical pixel width. Left at NERV_LINE
        now; the box-shadow alone signals "open." */
     box-shadow: 0 4px 28px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Hazard-stripe texture (2026-08-04), per Ian, sharing an Evangelion
+     MAGI-terminal reference screenshot: "can we add texture to the
+     background of big mode skill tray that makes it stand out but have
+     more evangelion computer [th]eming." Diagonal repeating stripe, same
+     orange already used everywhere in this file (not switching the
+     widget's established amber/orange palette to the reference image's
+     literal red - that palette choice is set at the theme-config level,
+     see theme.config.js), kept low-opacity so it reads as terminal
+     texture, not noise fighting the real content on top of it. A plain
+     ::before, painted behind the box's real DOM children by default paint
+     order - no z-index juggling needed. Clipped to the box's own
+     border-radius automatically since the box already has overflow
+     hidden set. */
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+      45deg,
+      rgba(255, 107, 26, 0.05) 0px,
+      rgba(255, 107, 26, 0.05) 5px,
+      transparent 5px,
+      transparent 11px
+    );
+    pointer-events: none;
   }
 
   &:hover .tray-list,
@@ -1378,7 +1405,7 @@ const skillsTrayBox = css`
 
 // Fixed-height header zone (2026-08-04) - always the same 168px tall
 // region at the top of `skillsTrayBox`, holding the count + label,
-// whether the box is 84px (collapsed) or 260px (open) wide. Part of the
+// whether the box is 84px (collapsed) or 272px (open) wide. Part of the
 // SAME box now, not a separate handle element - see `skillsTrayBox`'s own
 // comment.
 const skillsTrayHandleZone = css`
@@ -1456,37 +1483,6 @@ const skillsFlyoutHeader = css`
   border-bottom: 1px solid ${NERV_LINE};
 `
 
-const skillRow = css`
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  font-size: 11px;
-  line-height: 1.4;
-  color: ${NERV_TEXT_DIM};
-  padding: 4px 4px;
-  border-left: 2px solid transparent;
-  transition: background 0.2s ease, border-color 0.2s ease;
-
-  &:hover {
-    background: color-mix(in srgb, ${STATUS_TEAL} 14%, transparent);
-    border-left: 2px solid ${STATUS_TEAL};
-  }
-  &:hover .detail {
-    transition-delay: 260ms;
-    grid-template-rows: 1fr;
-    opacity: 1;
-    pointer-events: auto;
-    margin-top: 4px;
-  }
-`
-
-const skillRowTop = css`
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 6px;
-`
-
 const skillRowName = css`
   color: ${NERV_TEXT};
   font-weight: 600;
@@ -1537,27 +1533,173 @@ const skillCallsLine = css`
   }
 `
 
-const SkillRow = ({ skill }) => (
-  <div className={skillRow}>
-    <div className={skillRowTop}>
-      <span className={skillRowName}>{skill.name}</span>
-      <span className={skillRowMeta}>
-        {formatSkillCounts(skill)}
-        {formatSkillLastUsed(skill.last_called_hours_ago)}
+// Hex grid (2026-08-04), replacing the plain row list - per Ian, sharing
+// the classic Evangelion MAGI-terminal emergency-screen reference image:
+// "could skills populate in big mode like this with the hexagonal pattern
+// of equal size and hovering over them makes the skill summary and info
+// readout overlay on the big mode readout of just the skill tray."
+//
+// `skillsHexWrap` is the one thing here that carries `position: relative`
+// - every hex's own hover overlay (`skillHexOverlay`, a CHILD of that
+// tiny hex) is `position: absolute; inset: 0`, and since the hex tile
+// ITSELF is left unpositioned (plain `static`), that absolute positioning
+// skips past the small hex and binds to `skillsHexWrap` instead - the
+// overlay covers the WHOLE grid area, not just its own tiny hex, which is
+// what "overlay on the big mode readout of just the skill tray" actually
+// asked for. CSS hover/descendant matching still works fine regardless of
+// this (it's based on DOM structure, not the positioning/containing-block
+// relationship used for layout), so `skillHexTile`'s own `&:hover
+// .hex-overlay` rule still only reveals THAT hex's own overlay.
+//
+// Honeycomb offset done the plain way - alternate rows get a
+// `margin-left` shift of half a hex-cell width via `skillsHexRowOffset`,
+// rows pulled together vertically with `skillsHexGrid`'s own negative
+// row gap equivalent (a small `margin-top` per row) so they nest without
+// literally overlapping. Real pointy-top hexagon via `clip-path`, not an
+// image or icon font - width is exactly height * (sqrt(3)/2) so the shape
+// is a true regular hexagon, not a stretched one.
+//
+// Content per hex kept intentionally minimal (call count, or "–" for
+// never-run, plus a short label) - a 62x74 hex has almost no usable text
+// area at its narrow top/bottom, so anything more detailed lives in the
+// hover overlay instead of being crammed into the cell itself.
+const SKILL_HEX_ROW_SIZE = 3
+
+const chunkSkillsIntoRows = (skills) => {
+  const rows = []
+  for (let i = 0; i < skills.length; i += SKILL_HEX_ROW_SIZE) {
+    rows.push(skills.slice(i, i + SKILL_HEX_ROW_SIZE))
+  }
+  return rows
+}
+
+const skillsHexWrap = css`
+  position: relative;
+  padding: 2px 4px 6px 4px;
+`
+
+const skillsHexGrid = css`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+`
+
+const skillHexRow = css`
+  display: flex;
+  gap: 4px;
+
+  &:nth-of-type(even) {
+    margin-left: 33px;
+  }
+  &:not(:first-of-type) {
+    margin-top: -14px;
+  }
+`
+
+const skillHexTile = css`
+  width: 62px;
+  height: 72px;
+  flex-shrink: 0;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: ${NERV_BG};
+  border: 1px solid ${NERV_LINE};
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+
+  &:hover {
+    background: color-mix(in srgb, ${STATUS_TEAL} 22%, ${NERV_BG});
+  }
+  &:hover .hex-overlay {
+    opacity: 1;
+    pointer-events: auto;
+  }
+`
+
+const skillHexCount = css`
+  font-size: 14px;
+  font-weight: 700;
+`
+
+const skillHexLabel = css`
+  font-size: 8px;
+  letter-spacing: 0.02em;
+  color: ${NERV_TEXT_DIM};
+  text-align: center;
+  line-height: 1.15;
+  max-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+const skillHexOverlay = css`
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: ${NERV_BG};
+  border: 1px solid ${STATUS_TEAL};
+  padding: 8px;
+  overflow-y: auto;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: ${NERV_LINE};
+    border-radius: 2px;
+  }
+`
+
+const SkillHex = ({ skill }) => {
+  const used = skill.call_count > 0
+  return (
+    <div className={skillHexTile}>
+      <span className={skillHexCount} style={{ color: used ? STATUS_TEAL : NERV_TEXT_DIM }}>
+        {used ? skill.call_count : "–"}
       </span>
-    </div>
-    {(skill.description || (skill.calls && skill.calls.length > 0)) && (
-      <div className={`detail ${detail}`} style={{ borderLeftColor: STATUS_TEAL }}>
-        <div className={detailInner}>
-          {skill.description}
-          {skill.calls && skill.calls.length > 0 && (
-            <div className={skillCallsLine}>
-              <strong>Calls:</strong> {skill.calls.join(", ")}
-            </div>
-          )}
+      <span className={skillHexLabel}>{skill.name}</span>
+      <div className={`hex-overlay ${skillHexOverlay}`}>
+        <div className={skillRowName}>{skill.name}</div>
+        <div className={skillRowMeta} style={{ whiteSpace: "normal", marginTop: 2 }}>
+          {formatSkillCounts(skill)}
+          {formatSkillLastUsed(skill.last_called_hours_ago)}
         </div>
+        {skill.description && (
+          <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.5, color: NERV_TEXT }}>
+            {skill.description}
+          </div>
+        )}
+        {skill.calls && skill.calls.length > 0 && (
+          <div className={skillCallsLine}>
+            <strong>Calls:</strong> {skill.calls.join(", ")}
+          </div>
+        )}
       </div>
-    )}
+    </div>
+  )
+}
+
+const SkillHexGrid = ({ skills }) => (
+  <div className={skillsHexWrap}>
+    <div className={skillsHexGrid}>
+      {chunkSkillsIntoRows(skills).map((row, i) => (
+        <div className={skillHexRow} key={i}>
+          {row.map((s) => (
+            <SkillHex key={s.name} skill={s} />
+          ))}
+        </div>
+      ))}
+    </div>
   </div>
 )
 
@@ -1604,9 +1746,7 @@ const SkillsTab = ({ skills }) => {
               carry that, this header line was a redundant rollup of the
               same information. */}
           <div className={skillsFlyoutHeader}>{skills.length} skills</div>
-          {skills.map((s) => (
-            <SkillRow key={s.name} skill={s} />
-          ))}
+          <SkillHexGrid skills={skills} />
         </div>
       </div>
     </div>
@@ -2154,8 +2294,20 @@ const Section = ({ statusKey, section, collapsible, recentCount }) => {
 // for the individual-item shape this now uses instead of a plain styled
 // div.
 const DailyGoals = ({ dailyGoal }) => {
-  const goals = dailyGoal && dailyGoal.goals ? dailyGoal.goals : []
-  if (!dailyGoal || goals.length === 0) return null
+  const rawGoals = dailyGoal && dailyGoal.goals ? dailyGoal.goals : []
+  if (!dailyGoal || rawGoals.length === 0) return null
+
+  // Per-item completion + reorder (2026-08-04 follow-up), per Ian: "when a
+  // goal's real item gets completed the goal can remain for the day but
+  // have strike thru and move to the bottom of the daily goals." Each goal
+  // now carries its own `completed` (see status_summary.py's
+  // project_needs_ian_status/load_daily_goal) instead of every row sharing
+  // one all-or-nothing flag - stable-sort (Array.sort is spec-guaranteed
+  // stable) puts completed items last without disturbing the relative
+  // order within either group, and nothing gets removed from the list -
+  // the point is a visible sense of progress through today's actual goals,
+  // not a shrinking list.
+  const goals = [...rawGoals].sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0))
 
   return (
     <div className={collapsibleSection}>
@@ -2166,7 +2318,7 @@ const DailyGoals = ({ dailyGoal }) => {
       <div className={`nested ${nestedList}`}>
         <div className={`${nestedInner} ${scrollList}`}>
           {goals.map((g, i) => (
-            <GoalRow key={i} goal={g} completed={dailyGoal.completed} />
+            <GoalRow key={i} goal={g} completed={g.completed} />
           ))}
         </div>
       </div>

@@ -188,6 +188,14 @@ NEEDS_IAN_PROJECT_RE = re.compile(r"^`([a-z0-9][a-z0-9\-]*)`")
 # "`dashboard-visualizer` Phase 2 — ..."). Used for grouping, see
 # parse_needs_ian_items' own comment below.
 
+# PROJECT_NAME_ANYWHERE_RE (2026-08-04) - same backtick-project convention as
+# NEEDS_IAN_PROJECT_RE above, but NOT anchored to the start of the string.
+# Needed for load_daily_goal's per-item completion check below: goal titles
+# from daily_goal.json phrase the project reference mid-sentence ("Decide
+# `mentor-mode`'s explain-vs-just-do-it line"), not leading the line the way
+# NEEDS-IAN.md's own entries do.
+PROJECT_NAME_ANYWHERE_RE = re.compile(r"`([a-z0-9][a-z0-9\-]*)`")
+
 
 def parse_needs_ian_items(needs_ian_text: str, limit: int = NEEDS_ATTENTION_LIMIT) -> dict:
     """Open NEEDS-IAN.md entries (🤔 ask/clarify or 🚧 blocked) for the widget's
@@ -940,7 +948,49 @@ def load_personal_health(config_path: Path, now: datetime) -> dict | None:
     }
 
 
-def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int) -> dict | None:
+def project_needs_ian_status(needs_ian_text: str, project: str) -> str:
+    """Per-project completion signal for load_daily_goal's per-item tracking
+    (2026-08-04), per Ian: "when a goal's real item gets completed the goal
+    can remain for the day but have strike thru and move to the bottom."
+    Aggregate progress (see load_daily_goal's own docstring) can say a goal
+    is done in general, but can't say WHICH goal - this can, for the common
+    case where a goal's title names a project that also has a NEEDS-IAN.md
+    entry, by checking that project's own entries specifically.
+
+    Unlike count_needs_ian/parse_needs_ian_items (which deliberately only
+    look at OPEN 🤔/🚧 entries - see their own comments), this scans every
+    top-level bullet under "## List", open and ✅ Resolved alike, since
+    telling "resolved" from "never had an entry" is exactly the distinction
+    a per-item completion check needs.
+
+    Returns 'open' if any open (🤔/🚧) entry currently references this
+    project, 'resolved' if it has at least one entry and all of them are
+    ✅ Resolved, or 'unknown' if this project has no NEEDS-IAN.md entry at
+    all to check - callers should fall back to the aggregate signal in that
+    case rather than assuming either way."""
+    list_section = needs_ian_text.split("## List", 1)
+    body = list_section[1] if len(list_section) > 1 else needs_ian_text
+    has_open = False
+    has_resolved = False
+    for line in body.splitlines():
+        kind_match = re.match(r"^- (🤔|🚧|✅)", line)
+        if not kind_match:
+            continue
+        project_match = PROJECT_NAME_ANYWHERE_RE.search(line)
+        if not project_match or project_match.group(1) != project:
+            continue
+        if kind_match.group(1) == "✅":
+            has_resolved = True
+        else:
+            has_open = True
+    if has_open:
+        return "open"
+    if has_resolved:
+        return "resolved"
+    return "unknown"
+
+
+def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int, needs_ian_text: str = "") -> dict | None:
     """Reads config/daily_goal.json, written by the goal-for-day skill (see
     ClaudeSpace/goal-for-day/SKILL.md) - NOT generated here, same free/
     deferred pattern as everything else in this file (this script never
@@ -991,7 +1041,23 @@ def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int) -> di
     referenced item lives in right now - "Needs Attention," "Backlog,"
     etc.) and `context` (why it matters / prior related info) - both
     rendered as their own independently-expandable SubField in the widget,
-    same shape ProjectRow already uses for Summary/Next steps/etc."""
+    same shape ProjectRow already uses for Summary/Next steps/etc.
+
+    Per-item `completed` added (2026-08-04 follow-up), per Ian: "when a
+    goal's real item gets completed the goal can remain for the day but
+    have strike thru and move to the bottom of the daily goals." The
+    aggregate `progress`/`completed`/`target_count` above are kept exactly
+    as before (still the only honest signal for goals whose item can't be
+    traced to a specific project), but each entry in `goals` now ALSO gets
+    its own `completed` bool: pulls the first backtick `` `project-name` ``
+    out of the goal's title and checks project_needs_ian_status for it - a
+    project with only ✅ Resolved NEEDS-IAN.md entries left is a real,
+    specific "this one's done" signal, not just "some equivalent amount of
+    tracker movement happened somewhere." Falls back to the shared aggregate
+    `completed` flag when the title doesn't name a recognizable project, or
+    that project has no NEEDS-IAN.md entry at all to check (status
+    'unknown') - so a goal never regresses to "can't tell" silently, it just
+    inherits the coarser signal instead."""
     if not config_path.exists():
         return None
     try:
@@ -1024,6 +1090,19 @@ def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int) -> di
     progress += max(0, baseline.get("needs_ian_count", needs_ian_count) - needs_ian_count)
     progress += max(0, baseline.get("idea_total", totals.get("idea", 0)) - totals.get("idea", 0))
     progress += max(0, totals.get("done_recent", 0) - baseline.get("done_recent", totals.get("done_recent", 0)))
+    aggregate_completed = progress >= target_count
+
+    for goal in goals:
+        project_match = PROJECT_NAME_ANYWHERE_RE.search(goal["title"] or "")
+        item_status = (
+            project_needs_ian_status(needs_ian_text, project_match.group(1)) if project_match else "unknown"
+        )
+        if item_status == "resolved":
+            goal["completed"] = True
+        elif item_status == "open":
+            goal["completed"] = False
+        else:
+            goal["completed"] = aggregate_completed
 
     return {
         "date": data["date"],
@@ -1031,7 +1110,7 @@ def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int) -> di
         "goals": goals,
         "target_count": target_count,
         "progress": min(progress, target_count),
-        "completed": progress >= target_count,
+        "completed": aggregate_completed,
     }
 
 
@@ -1226,7 +1305,7 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
         "active_project_names": active_project_names(index_text),
         "needs_ian_count": needs_ian_count,
         "most_recent_project": most_recently_touched_project(claude_space),
-        "daily_goal": load_daily_goal(daily_goal_config_path, totals, needs_ian_count),
+        "daily_goal": load_daily_goal(daily_goal_config_path, totals, needs_ian_count, needs_ian_text),
         "usage_resets": load_usage_resets(resets_config_path, now),
         "session_reset": load_session_reset(
             session_reset_config_path, now, latest_tracker_activity_mtime(claude_space, script_dir.parent)
