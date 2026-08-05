@@ -1246,16 +1246,28 @@ def _script_description(text: str) -> str:
     docstring line, skipping a leading shebang and blank lines. Returns
     "" if no such line is found within the first few lines (honest empty
     state, never guessed)."""
-    for line in text.splitlines()[:6]:
-        stripped = line.strip()
+    lines = text.splitlines()
+    i = 0
+    while i < min(6, len(lines)):
+        stripped = lines[i].strip()
         if not stripped or stripped.startswith("#!"):
+            i += 1
             continue
-        if stripped.startswith('"""'):
-            return stripped.strip('"').strip()
+        if stripped.startswith('"""') or stripped.startswith("'''"):
+            quote = '"""' if stripped.startswith('"""') else "'''"
+            # Check if line is just the opening quotes (multi-line docstring)
+            if stripped == quote:
+                # Multi-line: next line has the summary
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    if next_line and not next_line.startswith(quote):
+                        return next_line
+                return ""
+            else:
+                # Same-line docstring
+                return stripped.strip('"').strip("'").strip()
         if stripped.startswith("#"):
             return stripped.lstrip("#").strip()
-        if stripped.startswith("//"):
-            return stripped.lstrip("/").strip()
         break
     return ""
 
@@ -1272,7 +1284,7 @@ def load_scripts_catalog(claude_space: Path, dashboard_visualizer_dir: Path) -> 
     scripts = []
 
     def add_scripts_from(scripts_dir: Path, project_name: str):
-        entries = sorted(scripts_dir.glob("*.py")) + sorted(scripts_dir.glob("*.sh"))
+        entries = list(scripts_dir.glob("*.py")) + list(scripts_dir.glob("*.sh"))
         for script_path in sorted(entries):
             try:
                 text = script_path.read_text(errors="ignore")
