@@ -2632,23 +2632,27 @@ const AttentionEntryRow = ({ entry, indent }) => (
 // instead of Needs Attention's red so it still reads as its own category,
 // not a re-skin.
 //
-// Detail panel went through two shapes the same day. First pass used real
-// SubFields (one independently-expandable sub-panel each for Summary/
-// Currently in/Context), matching ProjectRow's own multi-field detail -
-// per Ian's ask: "maybe sub sections can be summary, an explandable read
-// out of what section it currently lives in and maybe the previous
-// context piece." Walked back after seeing it live: "the style of goals
-// explandable still is weird and different than the others... match the
-// font and styling of the text of the other expandables so its standard."
-// Root issue: GoalRow's OWN row is already AttentionEntryRow's exact
-// shape, but its detail panel had switched to ProjectRow's heavier,
-// separately-hoverable multi-SubField pattern instead - two different
-// rows in this file claiming the same "attentionRow" identity but
-// resolving their detail panel two different ways. Reverted to ONE flat
-// `detail`/`detailInner` block, exactly like AttentionEntryRow's own -
-// `formatGoalDetail` below just joins whichever of detail/current_section/
-// context are present into one readable block instead of three separate
-// hover targets.
+// Detail panel has gone through three shapes now. First pass used real
+// SubFields (Summary/Currently in/Context, each its own independently-
+// expandable sub-panel) matching ProjectRow's own multi-field detail -
+// per Ian's original ask: "maybe sub sections can be summary, an
+// explandable read out of what section it currently lives in and maybe
+// the previous context piece." Walked back to one flat concatenated
+// block after seeing it live: "the style of goals explandable still is
+// weird and different than the others... match the font and styling of
+// the text of the other expandables so its standard." Reinstated again
+// (2026-08-05), per Ian looking at the flat version live: "can we change
+// the font and styling so it matches other things? Summary, currently
+// in, etc. these should be expandable children." Reading both rounds of
+// feedback together: the actual complaint both times was never "don't
+// use SubFields" - it's that whatever rendered didn't visually match
+// ProjectRow's real SubFields. The flat-block version technically fixed
+// that by sidestepping SubFields entirely, but lost the per-field
+// expand/collapse Ian's original ask wanted. This version uses the
+// EXACT SAME `SubField` component ProjectRow itself uses (not a
+// reimplementation, not a styled copy) - same font, same label styling,
+// same nested/collapsible mechanics - so there's no way for it to drift
+// from "the other expandables" again.
 // requires_code destination note (2026-08-04 follow-up), per Ian: "it
 // should specify if it should be pasted into a regular thread or code if
 // it requires code or plugins." requires_code comes from status_summary.py
@@ -2665,18 +2669,6 @@ const goalPrompt = (title, detail, requiresCode) =>
   ` Before starting: read PROCESS.md and PHILOSOPHY.md in this folder for the ` +
   `tracker's conventions.`
 
-const formatGoalDetail = (goal) => {
-  const parts = []
-  if (goal.detail) parts.push(goal.detail)
-  if (goal.current_section) parts.push(`Currently in: ${goal.current_section}.`)
-  if (goal.context) parts.push(goal.context)
-  // requires_code tag (2026-08-04 follow-up) - visible in the hover detail
-  // too, not just baked into the copied prompt, so the destination is known
-  // before clicking, not just after.
-  parts.push(goal.requires_code ? "Code tab (real code work)." : "Regular thread.")
-  return parts.join(" ")
-}
-
 // Bullet icon shrunk to 9px (2026-08-04), smaller than the 12px default
 // every other row icon in this file uses - per Ian, twice: "the mini goal
 // bullets are a nice touche but theyre too big" and then, still not small
@@ -2686,7 +2678,6 @@ const formatGoalDetail = (goal) => {
 // decorative marker) rather than a semantic action icon like IconAsk/
 // IconBlocked.
 const GoalRow = ({ goal, completed }) => {
-  const detailText = formatGoalDetail(goal)
   return (
     <div
       className={
@@ -2703,11 +2694,28 @@ const GoalRow = ({ goal, completed }) => {
         <span className={attentionKind}>{completed ? <IconGoalDone size={9} /> : <IconGoal size={9} />}</span>
         <span>{goal.title}</span>
       </div>
-      {detailText && (
-        <div className={`detail ${detail}`} style={{ borderLeftColor: NERV_ORANGE }}>
-          <div className={detailInner}>{detailText}</div>
+      <div className={`detail ${detail}`} style={{ borderLeftColor: NERV_ORANGE }}>
+        <div className={detailInner}>
+          {goal.detail && (
+            <SubField label="Summary">
+              <div className={detailSummary}>{goal.detail}</div>
+            </SubField>
+          )}
+          {goal.current_section && (
+            <SubField label="Currently in">
+              <div>{goal.current_section}</div>
+            </SubField>
+          )}
+          {goal.context && (
+            <SubField label="Context">
+              <div>{goal.context}</div>
+            </SubField>
+          )}
+          <SubField label="Destination">
+            <div>{goal.requires_code ? "Code tab (real code work)." : "Regular thread."}</div>
+          </SubField>
         </div>
-      )}
+      </div>
     </div>
   )
 }
