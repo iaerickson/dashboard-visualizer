@@ -1285,13 +1285,16 @@ const toggleSkillsTray = (e) => {
 // moves, growing only extends the LEFT edge further out. One shape, one
 // fixed anchor point, grows in place - literally a container transform.
 //
-// top: 1px (2026-08-04, tuning the earlier `top: 0` fix) - per Ian: "when
-// highlighted the line looks like it goes just a hair above [the card's
-// own top edge]." A large border-radius curve tangent to a sharp square
-// corner right beside it (cardInner's own top-left) is a known optical
-// illusion - the curve reads as sitting slightly proud of a perfectly
-// aligned flat edge even when the underlying coordinates match exactly.
-// A 1px nudge down corrects for it.
+// top: 0, box-sizing: border-box (2026-08-04, revised again) - per Ian:
+// "NOW off on alignment when not selected." The previous round's `top: 1px`
+// nudge (meant to correct a reported "hair above" gap) evidently
+// overcorrected or wasn't the real fix - reverted to the exact, unfudged
+// `top: 0` this box's very first placement round established (flush with
+// cardInner's own top edge, same y-coordinate as the card itself, no
+// guessing). `box-sizing: border-box` added defensively so the 1px border
+// is included IN the declared box dimensions rather than added on top of
+// them - removes one more place a sub-pixel discrepancy between the
+// circle and the card's own border could sneak in.
 //
 // Entrance unchanged in spirit ("flip out seemingly from behind rotation
 // style... can go above that spot but the end static position cannot") -
@@ -1304,10 +1307,11 @@ const toggleSkillsTray = (e) => {
 // history for the full reasoning.
 const skillsTrayBox = css`
   position: absolute;
-  top: 1px;
+  top: 0;
   left: -84px;
   z-index: 5;
   width: 84px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   background: ${NERV_BG};
@@ -1320,10 +1324,11 @@ const skillsTrayBox = css`
   transform: rotate(-90deg);
   pointer-events: none;
   transform-origin: top right;
+  box-shadow: none;
   transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1) 280ms,
     transform 0.5s cubic-bezier(0.16, 1, 0.3, 1) 280ms, width 0.4s cubic-bezier(0.16, 1, 0.3, 1),
     left 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-radius 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-    background 0.25s ease, border-color 0.25s ease;
+    border-color 0.25s ease, box-shadow 0.25s ease;
 
   .is-expanded & {
     opacity: 1;
@@ -1335,14 +1340,24 @@ const skillsTrayBox = css`
   /* Grow IN PLACE (2026-08-04) - width and left change together, right
      edge stays put. This is the whole fix: one shared anchor, one
      continuous shape, instead of two pieces with independent positioning
-     math that could (and did) drift apart. */
+     math that could (and did) drift apart.
+     Background is NOT changed here (2026-08-04, real regression fixed) -
+     per Ian: "clear tool bar here is no good." The first merged version
+     swapped the solid NERV_BG panel for a near-transparent orange tint on
+     hover/open, which is what actually read as "clear"/washed-out - a
+     real panel needs to stay a solid, opaque surface once it's holding
+     real readable content, not fade toward see-through the moment it
+     opens. Background stays the same solid NERV_BG in both states now;
+     only the border brightens to orange and a box-shadow (same weight
+     the old flyout inner box used before the merge) gives it real depth
+     as a floating panel. */
   &:hover,
   &.is-open {
     width: 260px;
     left: -260px;
     border-radius: 10px 0 0 10px;
-    background: rgba(255, 107, 26, 0.05);
     border-color: ${NERV_ORANGE};
+    box-shadow: 0 4px 28px rgba(0, 0, 0, 0.5);
   }
 
   &:hover .tray-list,
