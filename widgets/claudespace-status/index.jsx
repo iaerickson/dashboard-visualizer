@@ -1580,25 +1580,31 @@ const skillCallsLine = css`
 // hexagones they should be right next to each other with thick borders
 // between them... match the theming here as much as possible."
 //
-// HEX_W/HEX_H - same true-hexagon ratio as the first pass (height = width
-// / (sqrt(3)/2), pointy-top clip-path), but the tiling math around them is
-// rebuilt from scratch:
-//   - `box-sizing: border-box` on the tile (2026-08-04, real bug) - the
-//     first pass never set this, so each hex's border ADDED to its
-//     declared width/height instead of being included in it, throwing off
-//     the honeycomb spacing by a couple px per hex - compounding across a
-//     3-wide grid, that's exactly the uneven gaps Ian flagged.
-//   - Same-row hexes sit with `gap: 0` - pointy-top hexagons have plain
-//     VERTICAL left/right edges (the clip-path's 25%-75% segments), so
-//     two of them placed with zero gap between their bounding boxes touch
-//     exactly along that edge - true tiling math, not an eyeballed value.
-//   - `margin-left: ${HEX_W / 2}px` on even rows (the honeycomb offset)
-//     and `margin-top: ${-(HEX_H * 0.25)}px` on every row but the first -
-//     pulls each row up so consecutive row-tops sit `HEX_H * 0.75` apart,
-//     the exact spacing at which one row's slanted bottom edge nests into
-//     the next row's slanted top edge with no gap. `skillsHexGrid` no
-//     longer has its own `gap` - that would just add slack back on top of
-//     this already-exact spacing.
+// FLAT-TOP orientation (2026-08-04, real reorientation, not just styling) -
+// per Ian, looking at the live pointy-top version next to the same
+// reference image again: "it should be flat at the top the hexagons need
+// to be rotated." Pointy-top hexagons (a vertex at top-center/bottom-
+// center) is what every earlier round of this section built - flat-top
+// (a flat horizontal edge at top/bottom, vertices at left-center/right-
+// center) is a 90-degree reorientation, not a small tweak, and it flips
+// which axis tiles by touching-edges vs. offset-rows:
+//   - Flat-top hexagons have a flat TOP/BOTTOM edge, so they tile cleanly
+//     stacked in COLUMNS (vertically, edge-to-edge, zero gap) - the exact
+//     role the old pointy-top ROWS played. `skillHexColumn` replaces
+//     `skillHexRow`; `skillsHexGrid` is now `flex-direction: row` (laying
+//     columns out left-to-right) instead of `column`.
+//   - Alternate COLUMNS get the offset now (`margin-top: HEX_H / 2` on
+//     even columns), not alternate rows - the honeycomb interlock axis
+//     rotates with the hexagon.
+//   - Column-to-column horizontal step is `HEX_W * 0.75` (via
+//     `margin-left: -(HEX_W * 0.25)` on every column but the first) - the
+//     same "asymmetric hexagon" math as before, just swapped from the
+//     vertical axis to the horizontal one.
+//   - `box-sizing: border-box` on the tile (2026-08-04, real bug from the
+//     original pointy-top build) - carried forward unchanged; still
+//     matters here for the same reason (border must be INSIDE the
+//     declared box, not added on top of it, or the spacing math above
+//     drifts by a couple px per hex).
 //   - Each hex keeps its own full border; two touching hexes' borders sit
 //     right next to each other, reading as one thicker shared line - the
 //     "thick borders between them" Ian asked for, not a separate seam
@@ -1653,30 +1659,30 @@ const skillCallsLine = css`
 //
 // This is also the pre-planned slot system Ian asked for ("preplan a grid
 // layout system for skills to slot in when we add more, it should be easy
-// to add a new skill into the next one") - `chunkSkillsIntoRows` just
-// walks the skills list in fixed-size chunks of `SKILL_HEX_ROW_SIZE`; a
+// to add a new skill into the next one") - `chunkSkillsIntoColumns` just
+// walks the skills list in fixed-size chunks of `SKILL_HEX_COL_SIZE`; a
 // new skill added to the catalog automatically lands in the next open
-// slot (or starts a new row) with no per-skill layout code anywhere in
+// slot (or starts a new column) with no per-skill layout code anywhere in
 // this file.
-// Bumped slightly (2026-08-04, from 62x72) - per Ian, comparing live
-// against the reference image directly: "i want it to look like this."
-// A little more room per hex for the bolder, triangle-flanked label below
-// to actually read clearly, same true-hexagon ratio as before.
-const HEX_W = 66
-const HEX_H = 76
-const SKILL_HEX_ROW_SIZE = 3
+// Flat-top ratio (2026-08-04, swapped from the old pointy-top 66x76) -
+// width is now the LONGER dimension (a regular flat-top hexagon has
+// width = height * 2/sqrt(3), the inverse of pointy-top's ratio), so W/H
+// swap along with the shape itself.
+const HEX_W = 78
+const HEX_H = 68
+const SKILL_HEX_COL_SIZE = 3
 // Solid near-black for text ON a filled red hex (2026-08-04) - NERV_BG
 // itself is translucent (`rgba(10, 9, 8, 0.92)`), fine for a background
 // layered over the card, but not for text that needs to read as opaque
 // dark-on-red regardless of what's underneath.
 const HEX_FILL_TEXT = "#0a0908"
 
-const chunkSkillsIntoRows = (skills) => {
-  const rows = []
-  for (let i = 0; i < skills.length; i += SKILL_HEX_ROW_SIZE) {
-    rows.push(skills.slice(i, i + SKILL_HEX_ROW_SIZE))
+const chunkSkillsIntoColumns = (skills) => {
+  const columns = []
+  for (let i = 0; i < skills.length; i += SKILL_HEX_COL_SIZE) {
+    columns.push(skills.slice(i, i + SKILL_HEX_COL_SIZE))
   }
-  return rows
+  return columns
 }
 
 // Solid background added (2026-08-04, real bug) - per Ian, comparing
@@ -1695,21 +1701,26 @@ const skillsHexWrap = css`
   padding: 2px 4px 10px 4px;
 `
 
+// `flex-direction: row` now (2026-08-04, was `column`) - the grid lays
+// COLUMNS out left-to-right; each column itself stacks its hexes
+// top-to-bottom. See the flat-top reorientation comment above for why the
+// row/column roles swapped along with the hexagon shape.
 const skillsHexGrid = css`
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-direction: row;
+  align-items: flex-start;
 `
 
-const skillHexRow = css`
+const skillHexColumn = css`
   display: flex;
+  flex-direction: column;
   gap: 0;
 
   &:nth-of-type(even) {
-    margin-left: ${HEX_W / 2}px;
+    margin-top: ${HEX_H / 2}px;
   }
   &:not(:first-of-type) {
-    margin-top: ${-(HEX_H * 0.25)}px;
+    margin-left: ${-(HEX_W * 0.25)}px;
   }
 `
 
@@ -1744,7 +1755,7 @@ const skillHexTile = css`
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
   border: 1px solid ${STATUS_RED};
   display: flex;
   flex-direction: column;
@@ -1770,13 +1781,18 @@ const skillHexTriangle = css`
   line-height: 1;
 `
 
+// max-width bumped 52px -> 60px (2026-08-04) - the flat-top reorientation
+// gives the label more literal horizontal room to work with (a flat-top
+// hex's full width is usable across its vertical center, unlike pointy-
+// top's narrower waist), so slightly less of each skill's name gets
+// truncated with an ellipsis than before.
 const skillHexLabel = css`
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-align: center;
   line-height: 1.15;
-  max-width: 52px;
+  max-width: 60px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1847,9 +1863,9 @@ const SkillHex = ({ skill }) => {
 const SkillHexGrid = ({ skills }) => (
   <div className={skillsHexWrap}>
     <div className={skillsHexGrid}>
-      {chunkSkillsIntoRows(skills).map((row, i) => (
-        <div className={skillHexRow} key={i}>
-          {row.map((s) => (
+      {chunkSkillsIntoColumns(skills).map((column, i) => (
+        <div className={skillHexColumn} key={i}>
+          {column.map((s) => (
             <SkillHex key={s.name} skill={s} />
           ))}
         </div>
