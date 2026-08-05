@@ -116,16 +116,28 @@ done
 # error, but only after burning a round confused about why - this check
 # points straight at the actual line instead.
 #
-# Scoped specifically to css`...` bodies (2026-08-04, fixed same day a
-# first, too-broad version of this check shipped) - a first pass grepped
-# EVERY /* */ block in the whole file, which false-positived on ordinary
-# JSX comments (`{/* ... */}`) elsewhere that happen to mention a
-# backtick-wrapped CSS selector in prose (e.g. "beats tinyStat's own
-# `& strong` rule") - those live in plain JS, not inside a template
-# literal, so a backtick there is completely harmless. This version only
-# scans the text between each `css\`` and its OWN closing backtick (none
-# of these css blocks use nested template literals, so the next literal
-# backtick after `css\`` reliably is that block's own close).
+# Scoped by JSX-comment shape, not css`...` boundary-matching (2026-08-04,
+# fixed a SECOND time same day - the previous version, itself a same-day
+# fix of an even earlier too-broad version, still missed a real instance
+# live). That version scanned text between each `css\`` and its "own"
+# closing backtick via `css\`(.*?)\``, found by regex - but a stray
+# backtick INSIDE the offending comment IS, from the regex's own point of
+# view, indistinguishable from that block's real closing backtick: it
+# matched there first, silently truncating its own search window right
+# before the bug it was supposed to catch. Caught by babel (step 1) with a
+# useless "Unexpected token" error nowhere near line 1381, not by this
+# check - the exact failure mode this check exists to prevent.
+#
+# New approach: don't try to locate css` bodies at all. Every legitimate
+# `/* ... */` block in this file is EITHER a real CSS comment inside a
+# css`...` template (no `{` before it) OR a JSX comment in the render tree,
+# which is always written as `{/* ... */}` (curly-brace wrapped - true for
+# every JSX comment in this file, checked live). So: find every `/* ... */`
+# block in the whole file, skip the ones immediately preceded by `{`
+# (real JSX comments, backticks there are harmless plain-JS prose), and
+# flag a backtick in anything left over. Doesn't need to find matching
+# template-literal boundaries at all, so a broken backtick can't hide from
+# it the way it hid from the boundary-matching version.
 for WIDGET_JSX in "$REPO_DIR"/widgets/*/index.jsx; do
   [ -e "$WIDGET_JSX" ] || continue
   WIDGET_NAME="$(basename "$(dirname "$WIDGET_JSX")")"
@@ -134,14 +146,15 @@ import re, sys
 path, name = sys.argv[1], sys.argv[2]
 src = open(path).read()
 bad = False
-for css_match in re.finditer(r"css`(.*?)`", src, re.DOTALL):
-    body = css_match.group(1)
-    body_start = css_match.start(1)
-    for comment_match in re.finditer(r"/\*.*?\*/", body, re.DOTALL):
-        if chr(96) in comment_match.group(0):
-            line_no = src.count("\n", 0, body_start + comment_match.start()) + 1
-            print(f"[FAIL] {name}/index.jsx has a backtick inside a /* */ comment inside a css` block, starting near line {line_no} - breaks template-literal parsing, reword without backticks")
-            bad = True
+for comment_match in re.finditer(r"/\*.*?\*/", src, re.DOTALL):
+    start = comment_match.start()
+    preceding = src[:start].rstrip()
+    if preceding.endswith("{"):
+        continue  # JSX comment ({/* ... */}) - plain JS, backticks harmless
+    if chr(96) in comment_match.group(0):
+        line_no = src.count("\n", 0, start) + 1
+        print(f"[FAIL] {name}/index.jsx has a backtick inside a /* */ CSS comment starting near line {line_no} - breaks template-literal parsing, reword without backticks")
+        bad = True
 if not bad:
     print(f"[ok] {name}/index.jsx has no backticks inside CSS-template comments")
 sys.exit(1 if bad else 0)

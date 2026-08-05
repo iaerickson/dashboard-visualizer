@@ -1257,6 +1257,32 @@ const toggleSkillsTray = (e) => {
   if (wrapEl) wrapEl.classList.toggle("is-open", skillsTrayOpen)
 }
 
+// toggleSkillHex/resetSkillHexSelection (2026-08-04) - per Ian: "when you
+// hover over them they are not legible at all they need to overtake the
+// skill tray with an overlay... until you click it, or if you leave the
+// skill tray it just resets." Replaces the old `&:hover .hex-overlay` CSS
+// rule entirely - hover-driven overlays were what produced the illegible,
+// half-rendered flicker in his screenshot (the mouse crossing from a tiny
+// hex onto its own overlay panel re-triggers hover state mid-transition).
+// A click now sets one hex "active" (plain DOM class, same imperative
+// pattern as `toggleSkillsTray` above - this file has no React state/hooks
+// available), clearing any previously active hex first so only one overlay
+// is ever showing. Clicking the same hex again toggles it back off.
+const toggleSkillHex = (e) => {
+  e.stopPropagation()
+  const tile = e.currentTarget
+  const wrapEl = tile.closest(".skills-tray-wrap")
+  if (!wrapEl) return
+  const wasActive = tile.classList.contains("is-active")
+  wrapEl.querySelectorAll(".skill-hex-tile.is-active").forEach((el) => el.classList.remove("is-active"))
+  if (!wasActive) tile.classList.add("is-active")
+}
+
+const resetSkillHexSelection = (wrapEl) => {
+  if (!wrapEl) return
+  wrapEl.querySelectorAll(".skill-hex-tile.is-active").forEach((el) => el.classList.remove("is-active"))
+}
+
 // Rebuilt a third time (2026-08-04) - per Ian, seeing the two-piece
 // version live: "so much better!! almost there when highlighted the line
 // looks like it goes just a hair above. Also the drop down menu... this
@@ -1350,8 +1376,17 @@ const skillsTrayBox = css`
      opens. Background stays the same solid NERV_BG in both states now;
      only the border brightens to orange and a box-shadow (same weight
      the old flyout inner box used before the merge) gives it real depth
-     as a floating panel. */
-  &:hover,
+     as a floating panel.
+
+     CLICK-ONLY now, no more hover-triggered open (2026-08-04, real bug) -
+     per Ian: "bug when skill tray is kinda sticky when it shouldnt. if u
+     click skill tray it should switch just between big mode and small
+     mode." The old rule opened on BOTH hover and the is-open class -
+     clicking while already hovering set is-open true on top of the hover
+     state, and once the mouse then left, hover ended but is-open (set by
+     the click) was still true, so the box stayed stuck open with no
+     hover left to explain why. One trigger only now: toggleSkillsTray's
+     is-open class, nothing else opens or closes this box. */
   &.is-open {
     width: 272px;
     left: -272px;
@@ -1367,34 +1402,31 @@ const skillsTrayBox = css`
     box-shadow: 0 4px 28px rgba(0, 0, 0, 0.5);
   }
 
-  /* Hazard-stripe texture (2026-08-04), per Ian, sharing an Evangelion
-     MAGI-terminal reference screenshot: "can we add texture to the
-     background of big mode skill tray that makes it stand out but have
-     more evangelion computer [th]eming." Diagonal repeating stripe, same
-     orange already used everywhere in this file (not switching the
-     widget's established amber/orange palette to the reference image's
-     literal red - that palette choice is set at the theme-config level,
-     see theme.config.js), kept low-opacity so it reads as terminal
-     texture, not noise fighting the real content on top of it. A plain
-     ::before, painted behind the box's real DOM children by default paint
-     order - no z-index juggling needed. Clipped to the box's own
-     border-radius automatically since the box already has overflow
-     hidden set. */
+  /* Hazard-stripe texture, re-themed red (2026-08-04) - per Ian, sharing
+     an Evangelion MAGI-terminal reference screenshot, then later: "match
+     the theming here as much as possible" against a second reference
+     showing the MAGI hex grid in red/black. First version kept this
+     stripe orange (matching the rest of the widget's palette) - Ian then
+     asked the tray's INTERIOR specifically to go red ("i dont like this
+     orange for skill tray... interior objects and stuff here should be
+     red"), keeping only the outer border + black background on the
+     established orange/black scheme. Uses color-mix against STATUS_RED
+     instead of a hand-picked rgba so this tracks the theme file if that
+     color ever changes. */
   &::before {
     content: "";
     position: absolute;
     inset: 0;
     background-image: repeating-linear-gradient(
       45deg,
-      rgba(255, 107, 26, 0.05) 0px,
-      rgba(255, 107, 26, 0.05) 5px,
+      color-mix(in srgb, ${STATUS_RED} 8%, transparent) 0px,
+      color-mix(in srgb, ${STATUS_RED} 8%, transparent) 5px,
       transparent 5px,
       transparent 11px
     );
     pointer-events: none;
   }
 
-  &:hover .tray-list,
   &.is-open .tray-list {
     transition-delay: 120ms;
     grid-template-rows: 1fr;
@@ -1435,10 +1467,19 @@ const skillsTabLabel = css`
   color: ${NERV_TEXT_DIM};
 `
 
+// Red now, not orange (2026-08-04) - per Ian: "match the theming here as
+// much as possible" against the MAGI red/black hex reference, and
+// separately "interior objects and stuff here should be red" - the tray's
+// own border + black background stay on the widget's established
+// orange/black scheme (that's the part Ian said "we have worked"), but
+// every accent INSIDE the tray switches to STATUS_RED. RED_LINE mirrors
+// NERV_LINE's own recipe (35% tint over transparent) so hairline borders
+// inside the tray match the weight of every other line in this file.
+const RED_LINE = `color-mix(in srgb, ${STATUS_RED} 35%, transparent)`
 const skillsTabCount = css`
   font-size: 12px;
   font-weight: 700;
-  color: ${NERV_ORANGE};
+  color: ${STATUS_RED};
 `
 
 // Cascades DOWN below the header zone, same grid 0fr->1fr reveal language
@@ -1477,10 +1518,10 @@ const skillsFlyoutHeader = css`
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: ${NERV_ORANGE};
+  color: ${STATUS_RED};
   margin-bottom: 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid ${NERV_LINE};
+  border-bottom: 1px solid ${RED_LINE};
 `
 
 const skillRowName = css`
@@ -1528,42 +1569,87 @@ const skillCallsLine = css`
   margin-top: 4px;
 
   & strong {
-    color: ${STATUS_TEAL};
+    color: ${STATUS_RED};
     font-weight: 600;
   }
 `
 
-// Hex grid (2026-08-04), replacing the plain row list - per Ian, sharing
-// the classic Evangelion MAGI-terminal emergency-screen reference image:
-// "could skills populate in big mode like this with the hexagonal pattern
-// of equal size and hovering over them makes the skill summary and info
-// readout overlay on the big mode readout of just the skill tray."
+// Hex grid (2026-08-04), replaced the plain row list, then reworked again
+// the same day - per Ian, sharing two MAGI-terminal reference images:
+// first "could skills populate in big mode like this with the hexagonal
+// pattern... hovering over them makes the skill summary and info readout
+// overlay on the big mode readout of just the skill tray," then live
+// feedback on that first pass plus a second reference image of a true
+// edge-to-edge red/black hex grid: "look at all the space for the
+// hexagones they should be right next to each other with thick borders
+// between them... match the theming here as much as possible."
 //
-// `skillsHexWrap` is the one thing here that carries `position: relative`
-// - every hex's own hover overlay (`skillHexOverlay`, a CHILD of that
-// tiny hex) is `position: absolute; inset: 0`, and since the hex tile
-// ITSELF is left unpositioned (plain `static`), that absolute positioning
-// skips past the small hex and binds to `skillsHexWrap` instead - the
-// overlay covers the WHOLE grid area, not just its own tiny hex, which is
-// what "overlay on the big mode readout of just the skill tray" actually
-// asked for. CSS hover/descendant matching still works fine regardless of
-// this (it's based on DOM structure, not the positioning/containing-block
-// relationship used for layout), so `skillHexTile`'s own `&:hover
-// .hex-overlay` rule still only reveals THAT hex's own overlay.
+// HEX_W/HEX_H - same true-hexagon ratio as the first pass (height = width
+// / (sqrt(3)/2), pointy-top clip-path), but the tiling math around them is
+// rebuilt from scratch:
+//   - `box-sizing: border-box` on the tile (2026-08-04, real bug) - the
+//     first pass never set this, so each hex's border ADDED to its
+//     declared width/height instead of being included in it, throwing off
+//     the honeycomb spacing by a couple px per hex - compounding across a
+//     3-wide grid, that's exactly the uneven gaps Ian flagged.
+//   - Same-row hexes sit with `gap: 0` - pointy-top hexagons have plain
+//     VERTICAL left/right edges (the clip-path's 25%-75% segments), so
+//     two of them placed with zero gap between their bounding boxes touch
+//     exactly along that edge - true tiling math, not an eyeballed value.
+//   - `margin-left: ${HEX_W / 2}px` on even rows (the honeycomb offset)
+//     and `margin-top: ${-(HEX_H * 0.25)}px` on every row but the first -
+//     pulls each row up so consecutive row-tops sit `HEX_H * 0.75` apart,
+//     the exact spacing at which one row's slanted bottom edge nests into
+//     the next row's slanted top edge with no gap. `skillsHexGrid` no
+//     longer has its own `gap` - that would just add slack back on top of
+//     this already-exact spacing.
+//   - Each hex keeps its own full border; two touching hexes' borders sit
+//     right next to each other, reading as one thicker shared line - the
+//     "thick borders between them" Ian asked for, not a separate seam
+//     hack.
 //
-// Honeycomb offset done the plain way - alternate rows get a
-// `margin-left` shift of half a hex-cell width via `skillsHexRowOffset`,
-// rows pulled together vertically with `skillsHexGrid`'s own negative
-// row gap equivalent (a small `margin-top` per row) so they nest without
-// literally overlapping. Real pointy-top hexagon via `clip-path`, not an
-// image or icon font - width is exactly height * (sqrt(3)/2) so the shape
-// is a true regular hexagon, not a stretched one.
+// Used/never-run now reads as FILLED vs OUTLINE, not just a dim vs. bright
+// count (2026-08-04, matching the reference image's checker of solid-red
+// and black-outlined cells) - a skill that's been called is a solid red
+// hex with dark text; one that's never run stays black with a red outline
+// and red text. Same real `call_count` data as before - the reference
+// image just gave the existing used/never-run distinction a far more
+// legible visual home than a small colored number did.
 //
-// Content per hex kept intentionally minimal (call count, or "–" for
-// never-run, plus a short label) - a 62x74 hex has almost no usable text
-// area at its narrow top/bottom, so anything more detailed lives in the
-// hover overlay instead of being crammed into the cell itself.
+// Selection is click-driven now, not hover (2026-08-04, real bug) - per
+// Ian: "when you hover over them they are not legible at all... until you
+// click it, or if you leave the skill tray it just resets." The old
+// `&:hover .hex-overlay` rule is what produced the illegible, half-
+// rendered flicker in his screenshot (crossing from a tiny hex onto its
+// own overlay re-triggers hover state mid-transition). `toggleSkillHex`
+// (defined up near `toggleSkillsTray`) sets one hex `.is-active` via a
+// plain click handler - `skillHexTile`'s own `&.is-active .hex-overlay`
+// rule is the only thing that reveals an overlay now. Leaving the tray
+// entirely calls `resetSkillHexSelection` (wired into `SkillsTab`'s own
+// `onMouseLeave`, alongside the existing `armCollapse` call) so nothing
+// stays pinned open once the mouse is gone.
+//
+// `skillsHexWrap` still carries `position: relative` for the SAME reason
+// as before - `skillHexOverlay` is `position: absolute; inset: 0` on a
+// tile that's itself left `static`, so it skips past the tiny hex and
+// binds to this wrap instead, covering the whole grid rather than just
+// its own cell.
+//
+// This is also the pre-planned slot system Ian asked for ("preplan a grid
+// layout system for skills to slot in when we add more, it should be easy
+// to add a new skill into the next one") - `chunkSkillsIntoRows` just
+// walks the skills list in fixed-size chunks of `SKILL_HEX_ROW_SIZE`; a
+// new skill added to the catalog automatically lands in the next open
+// slot (or starts a new row) with no per-skill layout code anywhere in
+// this file.
+const HEX_W = 62
+const HEX_H = 72
 const SKILL_HEX_ROW_SIZE = 3
+// Solid near-black for text ON a filled red hex (2026-08-04) - NERV_BG
+// itself is translucent (`rgba(10, 9, 8, 0.92)`), fine for a background
+// layered over the card, but not for text that needs to read as opaque
+// dark-on-red regardless of what's underneath.
+const HEX_FILL_TEXT = "#0a0908"
 
 const chunkSkillsIntoRows = (skills) => {
   const rows = []
@@ -1575,61 +1661,59 @@ const chunkSkillsIntoRows = (skills) => {
 
 const skillsHexWrap = css`
   position: relative;
-  padding: 2px 4px 6px 4px;
+  padding: 2px 4px 10px 4px;
 `
 
 const skillsHexGrid = css`
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
 `
 
 const skillHexRow = css`
   display: flex;
-  gap: 4px;
+  gap: 0;
 
   &:nth-of-type(even) {
-    margin-left: 33px;
+    margin-left: ${HEX_W / 2}px;
   }
   &:not(:first-of-type) {
-    margin-top: -14px;
+    margin-top: ${-(HEX_H * 0.25)}px;
   }
 `
 
 const skillHexTile = css`
-  width: 62px;
-  height: 72px;
+  width: ${HEX_W}px;
+  height: ${HEX_H}px;
+  box-sizing: border-box;
   flex-shrink: 0;
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  background: ${NERV_BG};
-  border: 1px solid ${NERV_LINE};
+  border: 2px solid ${STATUS_RED};
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease;
 
   &:hover {
-    background: color-mix(in srgb, ${STATUS_TEAL} 22%, ${NERV_BG});
+    border-color: ${NERV_TEXT};
   }
-  &:hover .hex-overlay {
+  &.is-active .hex-overlay {
     opacity: 1;
     pointer-events: auto;
   }
 `
 
 const skillHexCount = css`
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
 `
 
 const skillHexLabel = css`
   font-size: 8px;
   letter-spacing: 0.02em;
-  color: ${NERV_TEXT_DIM};
   text-align: center;
   line-height: 1.15;
   max-width: 48px;
@@ -1643,8 +1727,8 @@ const skillHexOverlay = css`
   inset: 0;
   z-index: 30;
   background: ${NERV_BG};
-  border: 1px solid ${STATUS_TEAL};
-  padding: 8px;
+  border: 1px solid ${STATUS_RED};
+  padding: 10px;
   overflow-y: auto;
   text-align: left;
   opacity: 0;
@@ -1655,7 +1739,7 @@ const skillHexOverlay = css`
     width: 4px;
   }
   &::-webkit-scrollbar-thumb {
-    background: ${NERV_LINE};
+    background: ${RED_LINE};
     border-radius: 2px;
   }
 `
@@ -1663,19 +1747,25 @@ const skillHexOverlay = css`
 const SkillHex = ({ skill }) => {
   const used = skill.call_count > 0
   return (
-    <div className={skillHexTile}>
-      <span className={skillHexCount} style={{ color: used ? STATUS_TEAL : NERV_TEXT_DIM }}>
+    <div
+      className={`skill-hex-tile ${skillHexTile}`}
+      onClick={toggleSkillHex}
+      style={{ background: used ? STATUS_RED : NERV_BG }}
+    >
+      <span className={skillHexCount} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
         {used ? skill.call_count : "–"}
       </span>
-      <span className={skillHexLabel}>{skill.name}</span>
+      <span className={skillHexLabel} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
+        {skill.name}
+      </span>
       <div className={`hex-overlay ${skillHexOverlay}`}>
-        <div className={skillRowName}>{skill.name}</div>
+        <div className={skillRowName} style={{ fontSize: 13 }}>{skill.name}</div>
         <div className={skillRowMeta} style={{ whiteSpace: "normal", marginTop: 2 }}>
           {formatSkillCounts(skill)}
           {formatSkillLastUsed(skill.last_called_hours_ago)}
         </div>
         {skill.description && (
-          <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.5, color: NERV_TEXT }}>
+          <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.5, color: NERV_TEXT }}>
             {skill.description}
           </div>
         )}
@@ -1721,13 +1811,19 @@ const SkillHexGrid = ({ skills }) => (
 // disarmCollapse/armCollapse on the captured `cardNode` - per Ian: "when
 // this flips out... that now needs to register as true since the tracker
 // size has expanded."
+// onMouseLeave also resets any active hex overlay (2026-08-04) - per Ian:
+// "if you leave the skill tray it just resets." Same handler, just one
+// more call alongside the existing armCollapse.
 const SkillsTab = ({ skills }) => {
   if (!skills || skills.length === 0) return null
   return (
     <div
       className={`skills-tray-wrap ${skillsTrayBox}`}
       onMouseEnter={() => { if (cardNode) disarmCollapse(cardNode) }}
-      onMouseLeave={() => { if (cardNode) armCollapse(cardNode) }}
+      onMouseLeave={(e) => {
+        if (cardNode) armCollapse(cardNode)
+        resetSkillHexSelection(e.currentTarget)
+      }}
     >
       {/* onClick lives on the header zone only, not the whole box
           (2026-08-04) - a click anywhere in the now-unified box would
