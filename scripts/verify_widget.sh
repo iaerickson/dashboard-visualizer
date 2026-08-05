@@ -161,6 +161,50 @@ sys.exit(1 if bad else 0)
 EOF
 done
 
+# --- 1.7. Skill Tray hex grid never computes wider than its own real
+# boundary (2026-08-05, real bug found live via screenshot) - per Ian: "if
+# something ever gets added and style or spacing makes it ever move past
+# like a hard boundary where some of it gets cut off can we make a check
+# for styling to make sure that never happens or is avoided?" The 4th hex
+# column (10 skills, 3-per-column chunking) visibly bled past
+# `skillsTrayBox`'s real right edge - fixed by capping the column COUNT
+# instead of letting it grow unbounded (see claudespace-status/index.jsx's
+# own `SKILL_HEX_COLUMNS` comment), but that fix is only as good as
+# whoever edits `HEX_W`/`SKILL_HEX_COLUMNS` next remembering to re-check
+# the math by hand. This check does that arithmetic for them: reads
+# `SKILLS_TRAY_HEX_ROW_MAX_WIDTH`, `HEX_W`, and `SKILL_HEX_COLUMNS`
+# straight out of the widget source (single source of truth stays in the
+# JS file, not duplicated here) and fails loud if the same flat-top tiling
+# formula the widget's own comments use (`HEX_W * (1 + 0.75 * (columns -
+# 1))`) would ever produce a row wider than the boundary - same live-parity
+# spirit as the backtick check above, just for a layout invariant instead
+# of a syntax one.
+CLAUDESPACE_WIDGET_JSX="$REPO_DIR/widgets/claudespace-status/index.jsx"
+if [ -f "$CLAUDESPACE_WIDGET_JSX" ]; then
+  python3 - "$CLAUDESPACE_WIDGET_JSX" << 'EOF' || OVERALL_OK=1
+import re, sys
+src = open(sys.argv[1]).read()
+
+def read_const(name):
+    m = re.search(rf"const {name}\s*=\s*(\d+)", src)
+    return int(m.group(1)) if m else None
+
+max_width = read_const("SKILLS_TRAY_HEX_ROW_MAX_WIDTH")
+hex_w = read_const("HEX_W")
+columns = read_const("SKILL_HEX_COLUMNS")
+
+if max_width is None or hex_w is None or columns is None:
+    print("[skip] Skill Tray hex boundary check - one of SKILLS_TRAY_HEX_ROW_MAX_WIDTH/HEX_W/SKILL_HEX_COLUMNS not found (widget may have been restructured)")
+    sys.exit(0)
+
+row_width = hex_w * (1 + 0.75 * (columns - 1))
+if row_width > max_width:
+    print(f"[FAIL] claudespace-status: hex grid row width ({row_width:.0f}px, HEX_W={hex_w} x {columns} columns) exceeds SKILLS_TRAY_HEX_ROW_MAX_WIDTH ({max_width}px) - hexes will visibly clip past the tray's edge; shrink HEX_W or reduce SKILL_HEX_COLUMNS")
+    sys.exit(1)
+print(f"[ok] claudespace-status: hex grid row width ({row_width:.0f}px) fits within its {max_width}px boundary")
+EOF
+fi
+
 # --- 2. status_summary.py runs clean ---
 if python3 "$REPO_DIR/scripts/status_summary.py" "$CLAUDE_SPACE" > /dev/null; then
   echo "[ok] status_summary.py runs clean against $CLAUDE_SPACE"

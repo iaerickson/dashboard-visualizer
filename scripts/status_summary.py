@@ -990,7 +990,13 @@ def project_needs_ian_status(needs_ian_text: str, project: str) -> str:
     return "unknown"
 
 
-def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int, needs_ian_text: str = "") -> dict | None:
+def load_daily_goal(
+    config_path: Path,
+    totals: dict,
+    needs_ian_count: int,
+    needs_ian_text: str = "",
+    code_project_names: frozenset = frozenset(),
+) -> dict | None:
     """Reads config/daily_goal.json, written by the goal-for-day skill (see
     ClaudeSpace/goal-for-day/SKILL.md) - NOT generated here, same free/
     deferred pattern as everything else in this file (this script never
@@ -1057,7 +1063,18 @@ def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int, needs
     `completed` flag when the title doesn't name a recognizable project, or
     that project has no NEEDS-IAN.md entry at all to check (status
     'unknown') - so a goal never regresses to "can't tell" silently, it just
-    inherits the coarser signal instead."""
+    inherits the coarser signal instead.
+
+    `requires_code` added same follow-up round, per Ian: "it should specify
+    if it should be pasted into a regular thread or code if it requires
+    code or plugins." Reuses the directory convention INDEX.md/PROCESS.md
+    already draw (`../Projects/` = real code, `ClaudeSpace/<name>/` =
+    tracker/skill work, no repo) rather than inventing a new signal - a
+    goal's named project is looked up in `code_project_names` (every
+    INDEX.md project whose link points into `../Projects/`, built once in
+    build_summary) and flagged True if it's a real code project. False
+    (including when the project can't be identified at all) means "regular
+    thread" - the safer default, since most tracker work isn't code."""
     if not config_path.exists():
         return None
     try:
@@ -1094,15 +1111,15 @@ def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int, needs
 
     for goal in goals:
         project_match = PROJECT_NAME_ANYWHERE_RE.search(goal["title"] or "")
-        item_status = (
-            project_needs_ian_status(needs_ian_text, project_match.group(1)) if project_match else "unknown"
-        )
+        project = project_match.group(1) if project_match else None
+        item_status = project_needs_ian_status(needs_ian_text, project) if project else "unknown"
         if item_status == "resolved":
             goal["completed"] = True
         elif item_status == "open":
             goal["completed"] = False
         else:
             goal["completed"] = aggregate_completed
+        goal["requires_code"] = bool(project) and project in code_project_names
 
     return {
         "date": data["date"],
@@ -1117,7 +1134,17 @@ def load_daily_goal(config_path: Path, totals: dict, needs_ian_count: int, needs
 SKILL_NAME_RE = re.compile(r"^name:\s*(.+)$", re.MULTILINE)
 SKILL_DESC_RE = re.compile(r"^description:\s*(.+)$", re.MULTILINE)
 SKILL_CALLS_RE = re.compile(r"^calls:\s*(.+)$", re.MULTILINE)
-SKILL_DESC_MAX_CHARS = 160
+# Raised 160 -> 600 (2026-08-05), per Ian, looking at the Skill Tray's new
+# click-to-open overlay live: "with this extra space we can have the
+# summary go longer and provide more info... this doesn't need to be
+# expandable but we can provide summary." The overlay already scrolls
+# (`overflow-y: auto`) once it's open, so there's no real UI reason to cut
+# a description short at all - 160 was sized for the old cramped hover
+# tooltip this overlay replaced several rounds ago, never revisited since.
+# Still a cap, not truly unlimited - 600 comfortably fits every real
+# description in this workspace today in full while still guarding
+# against a genuinely pathological one blowing out the panel.
+SKILL_DESC_MAX_CHARS = 600
 
 
 def load_skills_catalog(claude_space: Path) -> list:
@@ -1186,14 +1213,31 @@ def load_skills_catalog(claude_space: Path) -> list:
             description = description[:SKILL_DESC_MAX_CHARS].rsplit(" ", 1)[0] + "…"
         calls_match = SKILL_CALLS_RE.search(text)
         calls = [c.strip() for c in calls_match.group(1).split(",") if c.strip()] if calls_match else []
+        # updated_hours_ago (2026-08-05) - per Ian: "provide... latest
+        # update... when new skill is created or skill is updated skill
+        # tray needs to update." SKILL.md's own mtime, same file-mtime
+        # pattern every other "last touched"/"X hours ago" signal in this
+        # script already uses (see e.g. most_recently_touched_project) -
+        # editing a skill's SKILL.md IS what "updating" a skill means in
+        # this workspace, so this is a real signal, not a guess. This part
+        # was already live the moment it's read: `claude_space.glob(...)`
+        # re-scans the real folder on every widget refresh, so a newly
+        # created or freshly edited SKILL.md shows up (and gets a fresh
+        # mtime) automatically, no caching layer sits in front of it.
+        try:
+            updated_hours_ago = round((datetime.now() - datetime.fromtimestamp(skill_md.stat().st_mtime)).total_seconds() / 3600, 1)
+        except OSError:
+            updated_hours_ago = None
         catalog[name] = {
             "name": name,
             "description": description,
             "calls": calls,
+            "called_by": [],
             "call_count": 0,
             "manual_count": 0,
             "auto_count": 0,
             "last_called_hours_ago": None,
+            "updated_hours_ago": updated_hours_ago,
         }
 
     usage_log_path = claude_space / "skills-usage-log.json"
@@ -1233,10 +1277,12 @@ def load_skills_catalog(claude_space: Path) -> list:
                     "name": skill,
                     "description": "",
                     "calls": [],
+                    "called_by": [],
                     "call_count": 0,
                     "manual_count": 0,
                     "auto_count": 0,
                     "last_called_hours_ago": None,
+                    "updated_hours_ago": None,
                 }
             manual = manual_counts.get(skill, 0)
             auto = auto_counts.get(skill, 0)
@@ -1246,6 +1292,24 @@ def load_skills_catalog(claude_space: Path) -> list:
             last = latest_by_skill.get(skill)
             if last:
                 catalog[skill]["last_called_hours_ago"] = round((now - last).total_seconds() / 3600, 1)
+
+    # called_by (2026-08-05) - the reverse of `calls`, per Ian: "provide...
+    # if its used by other skills." `calls` (built above, from each
+    # skill's own SKILL.md frontmatter) only ever answers "what does THIS
+    # skill invoke" - looking at, say, `time-assessor`'s own entry gives
+    # no way to tell it's actually invoked BY `log-pose`/`goal-for-day`/
+    # `overnight-auto-execute` without cross-referencing all three by
+    # hand. One pass over the catalog once every `calls` list is known:
+    # for each skill A that declares it calls skill B, append A's name to
+    # B's own `called_by` list - a real, computed answer instead of
+    # something Ian would have to piece together himself from three
+    # different skills' descriptions.
+    for skill_entry in catalog.values():
+        for called_name in skill_entry.get("calls", []):
+            if called_name in catalog and skill_entry["name"] not in catalog[called_name]["called_by"]:
+                catalog[called_name]["called_by"].append(skill_entry["name"])
+    for skill_entry in catalog.values():
+        skill_entry["called_by"].sort()
 
     return sorted(catalog.values(), key=lambda s: (-s["call_count"], s["name"]))
 
@@ -1298,6 +1362,13 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
 
     needs_ian_count = count_needs_ian(needs_ian_text)
     daily_goal_config_path = script_dir.parent / "config" / "daily_goal.json"
+    # code_project_names (2026-08-04) - every INDEX.md project whose link
+    # points into `../Projects/`, i.e. a real repo per PROCESS.md/INDEX.md's
+    # own convention, rather than a ClaudeSpace/-only tracker or skill
+    # folder. Feeds load_daily_goal's requires_code flag below.
+    code_project_names = {
+        p["name"] for p in index_projects if p.get("link") and p["link"].startswith("../Projects/")
+    }
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -1305,7 +1376,9 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
         "active_project_names": active_project_names(index_text),
         "needs_ian_count": needs_ian_count,
         "most_recent_project": most_recently_touched_project(claude_space),
-        "daily_goal": load_daily_goal(daily_goal_config_path, totals, needs_ian_count, needs_ian_text),
+        "daily_goal": load_daily_goal(
+            daily_goal_config_path, totals, needs_ian_count, needs_ian_text, code_project_names
+        ),
         "usage_resets": load_usage_resets(resets_config_path, now),
         "session_reset": load_session_reset(
             session_reset_config_path, now, latest_tracker_activity_mtime(claude_space, script_dir.parent)

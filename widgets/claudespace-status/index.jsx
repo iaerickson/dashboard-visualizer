@@ -1567,18 +1567,24 @@ const skillRowName = css`
   font-weight: 600;
 `
 
-const skillRowMeta = css`
-  font-size: 9px;
-  color: ${NERV_TEXT_DIM};
-  white-space: nowrap;
-  flex-shrink: 0;
-`
-
 const formatSkillLastUsed = (hoursAgo) => {
   if (hoursAgo == null) return "never run"
   if (hoursAgo < 1) return "used <1h ago"
   if (hoursAgo < 24) return `used ${Math.round(hoursAgo)}h ago`
   return `used ${Math.round(hoursAgo / 24)}d ago`
+}
+
+// formatSkillUpdated (2026-08-05) - per Ian: "provide... latest update"
+// as one of the overlay's little-header sections. Mirrors
+// formatSkillLastUsed's own age-bucketing (mirrors how humans actually
+// talk about recency: hours/days) but reads from SKILL.md's own mtime
+// (`updated_hours_ago`, see status_summary.py) rather than the usage log -
+// "updated" and "used" are genuinely different facts about a skill.
+const formatSkillUpdated = (hoursAgo) => {
+  if (hoursAgo == null) return "unknown"
+  if (hoursAgo < 1) return "<1h ago"
+  if (hoursAgo < 24) return `${Math.round(hoursAgo)}h ago`
+  return `${Math.round(hoursAgo / 24)}d ago`
 }
 
 // formatSkillCounts (2026-08-04) - per Ian: "we need to make sure these
@@ -1596,20 +1602,34 @@ const formatSkillCounts = (skill) => {
   return `${manual} manual · `
 }
 
-// "calls" line (2026-08-04) - per Ian: "for these skills like log pose or
-// auto exec they should include what other skills they run or call."
-// Parsed from the skill's own SKILL.md `calls:` frontmatter (see
-// status_summary.py's load_skills_catalog) - only shows up for the
-// handful of skills that actually declare it, not guessed for the rest.
-const skillCallsLine = css`
-  font-size: 10px;
-  color: ${NERV_TEXT_DIM};
-  margin-top: 4px;
+// skillOverlaySection / skillOverlayLabel (2026-08-05) - per Ian: "we can
+// provide summary, number of times used, if its used by other skills,
+// latest update and these can have little headers... this doesnt need to
+// be expandable." Same visual shape as `detailLabel` (uppercase, small,
+// letter-spaced little-header look already established elsewhere in this
+// file) but STATUS_RED instead of NERV_ORANGE to match the Skill Tray's
+// own NGE-red theme rather than the rest of the widget's amber - and,
+// deliberately, no click/expand behavior at all: these are always-visible
+// static blocks, not another SubField.
+const skillOverlayLabel = css`
+  color: ${STATUS_RED};
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+`
 
-  & strong {
-    color: ${STATUS_RED};
-    font-weight: 600;
+const skillOverlaySection = css`
+  margin-top: 8px;
+  &:first-of-type {
+    margin-top: 6px;
   }
+`
+
+const skillOverlayBody = css`
+  font-size: 11px;
+  line-height: 1.5;
+  color: ${NERV_TEXT};
+  margin-top: 2px;
 `
 
 // Hex grid (2026-08-04), replaced the plain row list, then reworked again
@@ -1722,9 +1742,58 @@ const skillCallsLine = css`
 // margin before actually needing to widen the tray box itself (that's
 // the "yet" in Ian's own phrasing - a real next step if he wants bigger
 // still, not attempted here).
+// SKILLS_TRAY_HEX_ROW_MAX_WIDTH (2026-08-05) - per Ian, after a screenshot
+// caught the hex grid's 4th column bleeding straight past the tray's own
+// right edge into the widget next to it: "can we make a check for styling
+// to make sure that never happens or is avoided?" This is the single
+// source of truth for "how wide can one row of hexes actually get before
+// it blows past `skillsTrayBox`'s real boundary" - `skillsTrayBox`'s own
+// `.is-open` width (272px) minus `skillsTrayListInner`'s horizontal
+// padding (10px each side) minus `skillsHexWrap`'s own (4px each side) =
+// 244px; kept at a clean 242px to leave a couple px of real margin rather
+// than computing to the exact pixel. `scripts/verify_widget.sh` reads
+// this same constant (along with `HEX_W`/`SKILL_HEX_COLUMNS` below) and
+// fails the check if the flat-top tiling formula (`HEX_W * (1 + 0.75 *
+// (columns - 1))`, the same math `SKILL_HEX_COLUMNS`'s own comment uses)
+// ever computes a row wider than this - so changing either constant
+// without checking the other now fails loud in the same place every other
+// live-parity check already lives, instead of only showing up as clipped
+// hexes in a screenshot days later.
+const SKILLS_TRAY_HEX_ROW_MAX_WIDTH = 242
 const HEX_W = 94
 const HEX_H = 82
-const SKILL_HEX_COL_SIZE = 3
+// FIXED column count, growth now goes DOWN not RIGHT (2026-08-05, real
+// bug found live via screenshot) - per Ian: "wrong spot to add... if we
+// build out to ~4ish staggered hexagons wide, the size of the hexagons
+// should be decreased. additionally if thats the case, lets first see
+// what that looks like and rearrange them so new hex's get added to the
+// bottom... and then we will scroll as it gets built out."
+//
+// This used to be `SKILL_HEX_COL_SIZE = 3` - "3 skills per column," with
+// `chunkSkillsIntoColumns` opening a brand-new COLUMN every time a 4th
+// skill needed a home. That's exactly what the screenshot caught: 10
+// skills produced 4 columns (3+3+3+1), and `skillsHexGrid` (`flex-direction:
+// row`, no wrap, no width cap) just kept extending the grid rightward with
+// each new column - straight past `skillsTrayBox`'s own fixed 272px open
+// width, with the 4th column's hexes (`tutor`, `log-rollup`) visibly
+// clipped by the panel's real edge in Ian's screenshot. The tray's
+// vertical scroll (`skillsTrayListInner`'s `max-height: 420px;
+// overflow-y: auto`, which the whole hex grid already renders inside of)
+// was sitting right there unused the entire time - the grid was growing
+// in the one axis that ISN'T scrollable instead of the one that is.
+//
+// Fix: `SKILL_HEX_COLUMNS` is now the column COUNT (fixed at 3, matching
+// the width Ian already approved and tuned this hex size against - see
+// the sizing comment above), not a per-column skill limit. New skills
+// round-robin into whichever column comes next (`i % SKILL_HEX_COLUMNS`)
+// instead of opening a new column - so the grid's WIDTH never changes as
+// skills are added, only each column's HEIGHT does, which is exactly "new
+// hexes get added to the bottom" and lands inside the scroll container
+// that already exists for it. Going to 4 columns wide (Ian's other ask,
+// still open) is a real, deliberate widening + hex-size-down decision to
+// make separately, not something that should ever happen as a silent
+// side effect of the skill count crossing a multiple of 3 again.
+const SKILL_HEX_COLUMNS = 3
 // Solid near-black for text ON a filled red hex (2026-08-04) - NERV_BG
 // itself is translucent (`rgba(10, 9, 8, 0.92)`), fine for a background
 // layered over the card, but not for text that needs to read as opaque
@@ -1732,10 +1801,8 @@ const SKILL_HEX_COL_SIZE = 3
 const HEX_FILL_TEXT = "#0a0908"
 
 const chunkSkillsIntoColumns = (skills) => {
-  const columns = []
-  for (let i = 0; i < skills.length; i += SKILL_HEX_COL_SIZE) {
-    columns.push(skills.slice(i, i + SKILL_HEX_COL_SIZE))
-  }
+  const columns = Array.from({ length: SKILL_HEX_COLUMNS }, () => [])
+  skills.forEach((skill, i) => columns[i % SKILL_HEX_COLUMNS].push(skill))
   return columns
 }
 
@@ -1941,20 +2008,40 @@ const SkillHex = ({ skill }) => {
           exactly what made it render illegible/hidden behind later hexes. */}
       <div className={`hex-overlay ${skillHexOverlay}`}>
         <div className={skillRowName} style={{ fontSize: 13 }}>{skill.name}</div>
-        <div className={skillRowMeta} style={{ whiteSpace: "normal", marginTop: 2 }}>
-          {formatSkillCounts(skill)}
-          {formatSkillLastUsed(skill.last_called_hours_ago)}
-        </div>
+
         {skill.description && (
-          <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.5, color: NERV_TEXT }}>
-            {skill.description}
+          <div className={skillOverlaySection}>
+            <div className={skillOverlayLabel}>Summary</div>
+            <div className={skillOverlayBody}>{skill.description}</div>
           </div>
         )}
+
+        <div className={skillOverlaySection}>
+          <div className={skillOverlayLabel}>Used</div>
+          <div className={skillOverlayBody} style={{ whiteSpace: "normal" }}>
+            {formatSkillCounts(skill)}
+            {formatSkillLastUsed(skill.last_called_hours_ago)}
+          </div>
+        </div>
+
+        {skill.called_by && skill.called_by.length > 0 && (
+          <div className={skillOverlaySection}>
+            <div className={skillOverlayLabel}>Called by</div>
+            <div className={skillOverlayBody}>{skill.called_by.join(", ")}</div>
+          </div>
+        )}
+
         {skill.calls && skill.calls.length > 0 && (
-          <div className={skillCallsLine}>
-            <strong>Calls:</strong> {skill.calls.join(", ")}
+          <div className={skillOverlaySection}>
+            <div className={skillOverlayLabel}>Calls</div>
+            <div className={skillOverlayBody}>{skill.calls.join(", ")}</div>
           </div>
         )}
+
+        <div className={skillOverlaySection}>
+          <div className={skillOverlayLabel}>Last updated</div>
+          <div className={skillOverlayBody}>{formatSkillUpdated(skill.updated_hours_ago)}</div>
+        </div>
       </div>
     </div>
   )
