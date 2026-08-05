@@ -1705,10 +1705,17 @@ const skillsHexWrap = css`
 // COLUMNS out left-to-right; each column itself stacks its hexes
 // top-to-bottom. See the flat-top reorientation comment above for why the
 // row/column roles swapped along with the hexagon shape.
+// justify-content: center added (2026-08-04) - per Ian: "can u get it
+// centered more in the tab." The grid's actual content width (three
+// overlapping columns) is narrower than the tray's available width, and
+// with no justify-content set the row defaulted to flex-start, packing
+// everything against the left edge instead of centering in the space it
+// actually has.
 const skillsHexGrid = css`
   display: flex;
   flex-direction: row;
   align-items: flex-start;
+  justify-content: center;
 `
 
 const skillHexColumn = css`
