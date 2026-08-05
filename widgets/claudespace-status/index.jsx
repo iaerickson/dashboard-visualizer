@@ -1710,12 +1710,20 @@ const skillCallsLine = css`
 // width is now the LONGER dimension (a regular flat-top hexagon has
 // width = height * 2/sqrt(3), the inverse of pointy-top's ratio), so W/H
 // swap along with the shape itself.
-// Sized up again (2026-08-05, 78x68 -> 90x78), per Ian: "can we size up
-// the size of all the hexagons a little bit." Same ratio, just bigger -
-// 3 columns still fit comfortably inside the tray's ~244px available
-// width (90 + 2 * (90*0.75) = 225px).
-const HEX_W = 90
-const HEX_H = 78
+// Sized up twice now (2026-08-05): 78x68 -> 90x78, per Ian: "can we size
+// up the size of all the hexagons a little bit," then -> 94x82, per his
+// direct follow-up: "maybe just a little bigger for the sake of size and
+// eating up some empty space without needing to scroll or go outside the
+// boundaries yet." Pushed close to the real ceiling this time rather than
+// another small bump - tray's available row width is ~242px
+// (skillsTrayBox's 272px open width, minus tray-list's 20px and
+// skillsHexWrap's 8px of horizontal padding); 3 columns at this size take
+// 94 + 2 * (94 * 0.75) = 235px, about as large as fits with a small
+// margin before actually needing to widen the tray box itself (that's
+// the "yet" in Ian's own phrasing - a real next step if he wants bigger
+// still, not attempted here).
+const HEX_W = 94
+const HEX_H = 82
 const SKILL_HEX_COL_SIZE = 3
 // Solid near-black for text ON a filled red hex (2026-08-04) - NERV_BG
 // itself is translucent (`rgba(10, 9, 8, 0.92)`), fine for a background
