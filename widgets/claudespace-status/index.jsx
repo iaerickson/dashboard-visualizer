@@ -1503,6 +1503,22 @@ const trayBoxStyles = (accentColor) => css`
 // `flex-direction: column` + `gap` is what makes a second tray
 // automatically stack below the first instead of needing its own
 // absolute top offset.
+// Sibling-hide (2026-08-06), per Ian's screenshot feedback: an inactive
+// tray's own collapsed pill used to keep rendering directly below an OPEN
+// sibling panel - visually disconnected, "hanging" in empty space below
+// the open panel's own bottom edge instead of reading as part of the same
+// control. Now: whenever trayColumn contains any `.is-open` tray, every
+// OTHER tray hides itself (opacity + pointer-events, same pattern the
+// hazard-stripe/mini-mode reveal already uses elsewhere in this file, not
+// a new idiom) until the open one collapses back down. `:has()` keeps this
+// declarative and CSS-only - no new JS state needed, `.is-open` is already
+// the real source of truth `toggleTray` maintains. Specificity note: this
+// selector (1 class + :has(2 classes) + 1 class + :not(1 class) = 5
+// classes) correctly outranks `trayBoxStyles`'s own `.is-expanded &` rule
+// (2 classes) without `!important`, and reuses that same rule's already-
+// declared `opacity`/`transition` properties rather than redeclaring them.
+// Gap dropped from 8px to 0 (Ian: "they can also be right up next to each
+// other") - the two collapsed pills now sit flush when neither is open.
 const trayColumn = css`
   position: absolute;
   top: 0;
@@ -1510,8 +1526,13 @@ const trayColumn = css`
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 8px;
+  gap: 0;
   pointer-events: none;
+
+  &:has(.tray-wrap.is-open) .tray-wrap:not(.is-open) {
+    opacity: 0;
+    pointer-events: none;
+  }
 `
 
 // Content-hugging height now, not a fixed 168px (2026-08-04, real bug) -
