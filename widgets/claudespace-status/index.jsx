@@ -1281,15 +1281,15 @@ const toggleTray = (trayId, e) => {
     const otherEl = container && container.querySelector(`.tray-wrap[data-tray-id="${activeTrayId}"]`)
     if (otherEl) {
       otherEl.classList.remove("is-open")
-      resetSkillHexSelection(otherEl)
+      resetHexSelection(otherEl)
     }
   }
   wrapEl.classList.toggle("is-open", opening)
-  if (!opening) resetSkillHexSelection(wrapEl)
+  if (!opening) resetHexSelection(wrapEl)
   activeTrayId = opening ? trayId : null
 }
 
-// toggleSkillHex/resetSkillHexSelection (2026-08-04) - per Ian: "when you
+// toggleHexSelection/resetHexSelection (2026-08-04) - per Ian: "when you
 // hover over them they are not legible at all they need to overtake the
 // skill tray with an overlay... until you click it, or if you leave the
 // skill tray it just resets." Replaces the old `&:hover .hex-overlay` CSS
@@ -1300,19 +1300,19 @@ const toggleTray = (trayId, e) => {
 // pattern as `toggleTray` above - this file has no React state/hooks
 // available), clearing any previously active hex first so only one overlay
 // is ever showing. Clicking the same hex again toggles it back off.
-const toggleSkillHex = (e) => {
+const toggleHexSelection = (e) => {
   e.stopPropagation()
   const cell = e.currentTarget
   const wrapEl = cell.closest(".tray-wrap")
   if (!wrapEl) return
   const wasActive = cell.classList.contains("is-active")
-  wrapEl.querySelectorAll(".skill-hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
+  wrapEl.querySelectorAll(".hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
   if (!wasActive) cell.classList.add("is-active")
 }
 
-const resetSkillHexSelection = (wrapEl) => {
+const resetHexSelection = (wrapEl) => {
   if (!wrapEl) return
-  wrapEl.querySelectorAll(".skill-hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
+  wrapEl.querySelectorAll(".hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
 }
 
 // resetAllTrays (2026-08-04, real bug) - per Ian: "when it sometimes
@@ -1331,7 +1331,7 @@ const resetAllTrays = (cardEl) => {
   if (!cardEl) return
   cardEl.querySelectorAll(".tray-wrap").forEach((wrapEl) => {
     wrapEl.classList.remove("is-open")
-    resetSkillHexSelection(wrapEl)
+    resetHexSelection(wrapEl)
   })
   activeTrayId = null
 }
@@ -1531,10 +1531,7 @@ const trayLabel = css`
 // separately "interior objects and stuff here should be red" - the tray's
 // own border + black background stay on the widget's established
 // orange/black scheme (that's the part Ian said "we have worked"), but
-// every accent INSIDE the tray switches to STATUS_RED. RED_LINE mirrors
-// NERV_LINE's own recipe (35% tint over transparent) so hairline borders
-// inside the tray match the weight of every other line in this file.
-const RED_LINE = `color-mix(in srgb, ${STATUS_RED} 35%, transparent)`
+// every accent INSIDE the tray switches to STATUS_RED.
 const trayCountStyles = (accentColor) => css`
   font-size: 12px;
   font-weight: 700;
@@ -1585,13 +1582,13 @@ const formatSkillLastUsed = (hoursAgo) => {
   return `used ${Math.round(hoursAgo / 24)}d ago`
 }
 
-// formatSkillUpdated (2026-08-05) - per Ian: "provide... latest update"
+// formatUpdatedRecency (2026-08-05) - per Ian: "provide... latest update"
 // as one of the overlay's little-header sections. Mirrors
 // formatSkillLastUsed's own age-bucketing (mirrors how humans actually
 // talk about recency: hours/days) but reads from SKILL.md's own mtime
 // (`updated_hours_ago`, see status_summary.py) rather than the usage log -
 // "updated" and "used" are genuinely different facts about a skill.
-const formatSkillUpdated = (hoursAgo) => {
+const formatUpdatedRecency = (hoursAgo) => {
   if (hoursAgo == null) return "unknown"
   if (hoursAgo < 1) return "<1h ago"
   if (hoursAgo < 24) return `${Math.round(hoursAgo)}h ago`
@@ -1663,8 +1660,8 @@ const skillOverlayBody = css`
 // which axis tiles by touching-edges vs. offset-rows:
 //   - Flat-top hexagons have a flat TOP/BOTTOM edge, so they tile cleanly
 //     stacked in COLUMNS (vertically, edge-to-edge, zero gap) - the exact
-//     role the old pointy-top ROWS played. `skillHexColumn` replaces
-//     `skillHexRow`; `skillsHexGrid` is now `flex-direction: row` (laying
+//     role the old pointy-top ROWS played. `hexColumn` replaces
+//     `skillHexRow`; `hexGrid` is now `flex-direction: row` (laying
 //     columns out left-to-right) instead of `column`.
 //   - Alternate COLUMNS get the offset now (`margin-top: HEX_H / 2` on
 //     even columns), not alternate rows - the honeycomb interlock axis
@@ -1696,14 +1693,14 @@ const skillOverlayBody = css`
 // click it, or if you leave the skill tray it just resets." The old
 // `&:hover .hex-overlay` rule is what produced the illegible, half-
 // rendered flicker in his screenshot (crossing from a tiny hex onto its
-// own overlay re-triggers hover state mid-transition). `toggleSkillHex`
+// own overlay re-triggers hover state mid-transition). `toggleHexSelection`
 // (defined up near `toggleTray`) sets one hex `.is-active` via a
 // plain click handler. Leaving the tray entirely calls
-// `resetSkillHexSelection` (wired into `SkillsTab`'s own `onMouseLeave`,
+// `resetHexSelection` (wired into `SkillsTab`'s own `onMouseLeave`,
 // alongside the existing `armCollapse` call) so nothing stays pinned open
 // once the mouse is gone.
 //
-// `skillHexCell`/`skillHexTile` split (2026-08-04, second real bug found
+// `hexCell`/`skillHexTile` split (2026-08-04, second real bug found
 // live, same round as the click-selection fix above) - clicking a hex DID
 // select it, but the overlay rendered illegible and half-hidden behind
 // LATER hexes in the grid. Root cause: `clip-path` (on `skillHexTile`)
@@ -1714,25 +1711,25 @@ const skillOverlayBody = css`
 // painted in normal DOM order on top of it, since z-index only wins
 // battles within a shared stacking context - hexes from later rows won
 // that fight and covered the overlay's text. Fixed by splitting each
-// hex into an unclipped `skillHexCell` wrapper (plain, no clip-path, no
+// hex into an unclipped `hexCell` wrapper (plain, no clip-path, no
 // stacking context of its own) holding two SIBLINGS: the visual
 // `skillHexTile` (still clipped, still what's visibly clicked) and the
 // overlay - since the overlay is no longer a DESCENDANT of anything
 // clip-path'd, it isn't trapped in a local stacking context and its
-// `z-index: 30` finally competes at `skillsHexWrap`'s level, correctly
+// `z-index: 30` finally competes at `hexWrap`'s level, correctly
 // painting over every hex regardless of row. `.is-active` now toggles on
-// the cell (via `toggleSkillHex`), not the tile, so the CSS descendant
+// the cell (via `toggleHexSelection`), not the tile, so the CSS descendant
 // selector (`&.is-active .hex-overlay`) still reaches the overlay.
 //
-// `skillsHexWrap` still carries `position: relative` for the SAME layout
-// reason as before - `skillHexOverlay` is `position: absolute; inset: 0`
-// and `skillHexCell` is deliberately left `static` (unpositioned), so the
+// `hexWrap` still carries `position: relative` for the SAME layout
+// reason as before - `hexOverlayStyles` is `position: absolute; inset: 0`
+// and `hexCell` is deliberately left `static` (unpositioned), so the
 // overlay skips past it and binds to this wrap instead, covering the
 // whole grid rather than just its own cell.
 //
 // This is also the pre-planned slot system Ian asked for ("preplan a grid
 // layout system for skills to slot in when we add more, it should be easy
-// to add a new skill into the next one") - `chunkSkillsIntoColumns` just
+// to add a new skill into the next one") - `chunkIntoColumns` just
 // walks the skills list in fixed-size chunks of `SKILL_HEX_COL_SIZE`; a
 // new skill added to the catalog automatically lands in the next open
 // slot (or starts a new column) with no per-skill layout code anywhere in
@@ -1748,7 +1745,7 @@ const skillOverlayBody = css`
 // boundaries yet." Pushed close to the real ceiling this time rather than
 // another small bump - tray's available row width is ~242px
 // (skillsTrayBox's 272px open width, minus tray-list's 20px and
-// skillsHexWrap's 8px of horizontal padding); 3 columns at this size take
+// hexWrap's 8px of horizontal padding); 3 columns at this size take
 // 94 + 2 * (94 * 0.75) = 235px, about as large as fits with a small
 // margin before actually needing to widen the tray box itself (that's
 // the "yet" in Ian's own phrasing - a real next step if he wants bigger
@@ -1760,7 +1757,7 @@ const skillOverlayBody = css`
 // source of truth for "how wide can one row of hexes actually get before
 // it blows past `skillsTrayBox`'s real boundary" - `skillsTrayBox`'s own
 // `.is-open` width (272px) minus `skillsTrayListInner`'s horizontal
-// padding (10px each side) minus `skillsHexWrap`'s own (4px each side) =
+// padding (10px each side) minus `hexWrap`'s own (4px each side) =
 // 244px; kept at a clean 242px to leave a couple px of real margin rather
 // than computing to the exact pixel. `scripts/verify_widget.sh` reads
 // this same constant (along with `HEX_W`/`SKILL_HEX_COLUMNS` below) and
@@ -1781,9 +1778,9 @@ const HEX_H = 82
 // bottom... and then we will scroll as it gets built out."
 //
 // This used to be `SKILL_HEX_COL_SIZE = 3` - "3 skills per column," with
-// `chunkSkillsIntoColumns` opening a brand-new COLUMN every time a 4th
+// `chunkIntoColumns` opening a brand-new COLUMN every time a 4th
 // skill needed a home. That's exactly what the screenshot caught: 10
-// skills produced 4 columns (3+3+3+1), and `skillsHexGrid` (`flex-direction:
+// skills produced 4 columns (3+3+3+1), and `hexGrid` (`flex-direction:
 // row`, no wrap, no width cap) just kept extending the grid rightward with
 // each new column - straight past `skillsTrayBox`'s own fixed 272px open
 // width, with the 4th column's hexes (`tutor`, `log-rollup`) visibly
@@ -1811,9 +1808,9 @@ const SKILL_HEX_COLUMNS = 3
 // dark-on-red regardless of what's underneath.
 const HEX_FILL_TEXT = "#0a0908"
 
-const chunkSkillsIntoColumns = (skills) => {
+const chunkIntoColumns = (items) => {
   const columns = Array.from({ length: SKILL_HEX_COLUMNS }, () => [])
-  skills.forEach((skill, i) => columns[i % SKILL_HEX_COLUMNS].push(skill))
+  items.forEach((item, i) => columns[i % SKILL_HEX_COLUMNS].push(item))
   return columns
 }
 
@@ -1828,7 +1825,7 @@ const chunkSkillsIntoColumns = (skills) => {
 // the tray's textured background. Dropped - the little texture that
 // shows through the tiling's own tiny corner gaps now is far less area
 // than the visible rectangle seam was.
-const skillsHexWrap = css`
+const hexWrap = css`
   position: relative;
   padding: 2px 4px 10px 4px;
 `
@@ -1843,14 +1840,14 @@ const skillsHexWrap = css`
 // with no justify-content set the row defaulted to flex-start, packing
 // everything against the left edge instead of centering in the space it
 // actually has.
-const skillsHexGrid = css`
+const hexGrid = css`
   display: flex;
   flex-direction: row;
   align-items: flex-start;
   justify-content: center;
 `
 
-const skillHexColumn = css`
+const hexColumn = css`
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -1868,8 +1865,8 @@ const skillHexColumn = css`
 // `filter`, or `position` here - any of those would re-create the same
 // stacking-context trap this split exists to avoid, or (for `position`)
 // would make this cell itself the overlay's containing block instead of
-// letting it skip through to `skillsHexWrap`.
-const skillHexCell = css`
+// letting it skip through to `hexWrap`.
+const hexCell = css`
   width: ${HEX_W}px;
   height: ${HEX_H}px;
   flex-shrink: 0;
@@ -1896,8 +1893,8 @@ const skillHexCell = css`
 // outline on a clip-path'd shape at this scale.
 //
 // Fixed with two stacked, independently clipped layers instead of a
-// border at all: `skillHexOutline` (this cell's direct child) is a solid
-// STATUS_RED hexagon at full size; `skillHexFill` sits inset a couple px
+// border at all: `hexOutlineStyles` (this cell's direct child) is a solid
+// STATUS_RED hexagon at full size; `hexFill` sits inset a couple px
 // on every side, clipped to the SAME polygon (percentages recompute
 // automatically for the smaller box), and holds the real fill color -
 // STATUS_RED again for a used skill (reads as fully solid, exactly like
@@ -1905,22 +1902,22 @@ const skillHexCell = css`
 // for a never-run one (the red outer layer shows through as a crisp,
 // uniform ring all the way around - the actual "slight red outline" Ian
 // asked for, working on every edge, not just the flat ones).
-const skillHexOutline = css`
+const hexOutlineStyles = (accentColor) => css`
   width: 100%;
   height: 100%;
   box-sizing: border-box;
   clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
-  background: ${STATUS_RED};
+  background: ${accentColor};
   position: relative;
 
-  .skill-hex-cell:hover & {
+  .hex-cell:hover & {
     background: ${NERV_TEXT};
   }
 `
 
 const HEX_OUTLINE_WIDTH = 2
 
-const skillHexFill = css`
+const hexFill = css`
   position: absolute;
   inset: ${HEX_OUTLINE_WIDTH}px;
   clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
@@ -1940,7 +1937,7 @@ const skillHexFill = css`
 // call-count data still lives one click away in the overlay
 // (`formatSkillCounts`), this is purely the tile FACE now matching that
 // specific visual language instead of a half-borrowed version of it.
-const skillHexTriangle = css`
+const hexTriangle = css`
   font-size: 9px;
   line-height: 1;
   flex-shrink: 0;
@@ -1958,7 +1955,7 @@ const skillHexTriangle = css`
 // not the normal case) so a pathologically long future skill name still
 // can't overflow the hex and overlap its neighbors - "no overlap," same
 // as asked, just handled by capping instead of truncating on line one.
-const skillHexLabel = css`
+const hexLabel = css`
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -1974,12 +1971,12 @@ const skillHexLabel = css`
   overflow: hidden;
 `
 
-const skillHexOverlay = css`
+const hexOverlayStyles = (accentColor) => css`
   position: absolute;
   inset: 0;
   z-index: 30;
   background: ${NERV_BG};
-  border: 1px solid ${STATUS_RED};
+  border: 1px solid ${accentColor};
   padding: 10px;
   overflow-y: auto;
   text-align: left;
@@ -1991,80 +1988,92 @@ const skillHexOverlay = css`
     width: 4px;
   }
   &::-webkit-scrollbar-thumb {
-    background: ${RED_LINE};
+    background: color-mix(in srgb, ${accentColor} 35%, transparent);
     border-radius: 2px;
   }
 `
 
-const SkillHex = ({ skill }) => {
-  const used = skill.call_count > 0
-  return (
-    <div className={`skill-hex-cell ${skillHexCell}`} onClick={toggleSkillHex}>
-      <div className={skillHexOutline}>
-        <div className={skillHexFill} style={{ background: used ? STATUS_RED : NERV_BG }}>
-          <span className={skillHexTriangle} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
-            ▲
-          </span>
-          <span className={skillHexLabel} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
-            {skill.name}
-          </span>
-          <span className={skillHexTriangle} style={{ color: used ? HEX_FILL_TEXT : STATUS_RED }}>
-            ▼
-          </span>
-        </div>
+// renderSkillOverlayBody extracted from the old skill-only hex tile
+// component (this task) so the overlay CONTENT stays skill-specific while
+// the tile mechanics around it (HexTile below) become fully generic - a
+// second tray (scripts, Task 5) reuses HexTile/HexGrid with its own
+// overlay-body renderer instead of this one.
+const renderSkillOverlayBody = (skill) => (
+  <div>
+    <div className={skillRowName} style={{ fontSize: 13 }}>{skill.name}</div>
+
+    {skill.description && (
+      <div className={skillOverlaySection}>
+        <div className={skillOverlayLabel}>Summary</div>
+        <div className={skillOverlayBody}>{skill.description}</div>
       </div>
-      {/* Sibling of skillHexOutline, not a child of it (2026-08-04, real bug -
-          see the comment above this whole section) - a clip-path'd parent
-          traps this overlay's z-index in a local stacking context, which is
-          exactly what made it render illegible/hidden behind later hexes. */}
-      <div className={`hex-overlay ${skillHexOverlay}`}>
-        <div className={skillRowName} style={{ fontSize: 13 }}>{skill.name}</div>
+    )}
 
-        {skill.description && (
-          <div className={skillOverlaySection}>
-            <div className={skillOverlayLabel}>Summary</div>
-            <div className={skillOverlayBody}>{skill.description}</div>
-          </div>
-        )}
-
-        <div className={skillOverlaySection}>
-          <div className={skillOverlayLabel}>Used</div>
-          <div className={skillOverlayBody} style={{ whiteSpace: "normal" }}>
-            {formatSkillCounts(skill)}
-            {formatSkillLastUsed(skill.last_called_hours_ago)}
-          </div>
-        </div>
-
-        {skill.called_by && skill.called_by.length > 0 && (
-          <div className={skillOverlaySection}>
-            <div className={skillOverlayLabel}>Called by</div>
-            <div className={skillOverlayBody}>{skill.called_by.join(", ")}</div>
-          </div>
-        )}
-
-        {skill.calls && skill.calls.length > 0 && (
-          <div className={skillOverlaySection}>
-            <div className={skillOverlayLabel}>Calls</div>
-            <div className={skillOverlayBody}>{skill.calls.join(", ")}</div>
-          </div>
-        )}
-
-        <div className={skillOverlaySection}>
-          <div className={skillOverlayLabel}>Last updated</div>
-          <div className={skillOverlayBody}>{formatSkillUpdated(skill.updated_hours_ago)}</div>
-        </div>
+    <div className={skillOverlaySection}>
+      <div className={skillOverlayLabel}>Used</div>
+      <div className={skillOverlayBody} style={{ whiteSpace: "normal" }}>
+        {formatSkillCounts(skill)}
+        {formatSkillLastUsed(skill.last_called_hours_ago)}
       </div>
     </div>
-  )
-}
 
-const SkillHexGrid = ({ skills }) => (
-  <div className={skillsHexWrap}>
-    <div className={skillsHexGrid}>
-      {chunkSkillsIntoColumns(skills).map((column, i) => (
-        <div className={skillHexColumn} key={i}>
-          {column.map((s) => (
-            <SkillHex key={s.name} skill={s} />
+    {skill.called_by && skill.called_by.length > 0 && (
+      <div className={skillOverlaySection}>
+        <div className={skillOverlayLabel}>Called by</div>
+        <div className={skillOverlayBody}>{skill.called_by.join(", ")}</div>
+      </div>
+    )}
+
+    {skill.calls && skill.calls.length > 0 && (
+      <div className={skillOverlaySection}>
+        <div className={skillOverlayLabel}>Calls</div>
+        <div className={skillOverlayBody}>{skill.calls.join(", ")}</div>
+      </div>
+    )}
+
+    <div className={skillOverlaySection}>
+      <div className={skillOverlayLabel}>Last updated</div>
+      <div className={skillOverlayBody}>{formatUpdatedRecency(skill.updated_hours_ago)}</div>
+    </div>
+  </div>
+)
+
+// HexTile/HexGrid (this task) - generalized from the old skill-only hex
+// tile/grid pair so a second tray (scripts, Task 5) can reuse the same
+// tile mechanics with its own accent color and overlay content, not just
+// the skill tray. Same two-layer outline/fill split and unclipped-cell/
+// overlay-sibling structure as before (see the big comment above for why
+// both of those exist) - just parameterized on `accentColor` instead of
+// hardcoding STATUS_RED, and taking `renderOverlayBody` instead of
+// hardcoding the skill-specific overlay markup.
+const HexTile = ({ item, accentColor, filled, renderOverlayBody }) => (
+  <div className={`hex-cell ${hexCell}`} onClick={toggleHexSelection}>
+    <div className={hexOutlineStyles(accentColor)}>
+      <div className={hexFill} style={{ background: filled ? accentColor : NERV_BG }}>
+        <span className={hexTriangle} style={{ color: filled ? HEX_FILL_TEXT : accentColor }}>▲</span>
+        <span className={hexLabel} style={{ color: filled ? HEX_FILL_TEXT : accentColor }}>{item.name}</span>
+        <span className={hexTriangle} style={{ color: filled ? HEX_FILL_TEXT : accentColor }}>▼</span>
+      </div>
+    </div>
+    <div className={`hex-overlay ${hexOverlayStyles(accentColor)}`}>
+      {renderOverlayBody(item, accentColor)}
+    </div>
+  </div>
+)
+
+const HexGrid = ({ items, accentColor, fillPredicate, renderOverlayBody }) => (
+  <div className={hexWrap}>
+    <div className={hexGrid}>
+      {chunkIntoColumns(items).map((column, i) => (
+        <div className={hexColumn} key={i}>
+          {column.map((item) => (
+            <HexTile
+              key={item.path || item.name}
+              item={item}
+              accentColor={accentColor}
+              filled={fillPredicate(item)}
+              renderOverlayBody={renderOverlayBody}
+            />
           ))}
         </div>
       ))}
@@ -2102,7 +2111,7 @@ const Tray = ({ id, accentColor, label, count, children }) => {
       onMouseEnter={() => { if (cardNode) disarmCollapse(cardNode) }}
       onMouseLeave={(e) => {
         if (cardNode) armCollapse(cardNode)
-        resetSkillHexSelection(e.currentTarget)
+        resetHexSelection(e.currentTarget)
       }}
     >
       {/* onClick lives on the header zone only, not the whole box
@@ -3152,7 +3161,12 @@ export const render = (state) => {
           in the exact same instant and over the exact same transition as
           everything else in `.expand`. */}
       <Tray id="skills" accentColor={STATUS_RED} label="SKILL TRAY" count={skills.length}>
-        <SkillHexGrid skills={skills} />
+        <HexGrid
+          items={skills}
+          accentColor={STATUS_RED}
+          fillPredicate={(s) => s.call_count > 0}
+          renderOverlayBody={renderSkillOverlayBody}
+        />
       </Tray>
     </div>
   )
