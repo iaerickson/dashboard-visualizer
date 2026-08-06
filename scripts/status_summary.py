@@ -1240,6 +1240,81 @@ SKILL_CALLS_RE = re.compile(r"^calls:\s*(.+)$", re.MULTILINE)
 SKILL_DESC_HARD_SAFETY_CAP = 4000
 
 
+def _script_description(text: str) -> str:
+    """Best-effort one-line description for a script that has no
+    frontmatter convention (unlike SKILL.md) - the first real comment/
+    docstring line, skipping a leading shebang and blank lines. Returns
+    "" if no such line is found within the first few lines (honest empty
+    state, never guessed)."""
+    lines = text.splitlines()
+    i = 0
+    while i < min(6, len(lines)):
+        stripped = lines[i].strip()
+        if not stripped or stripped.startswith("#!"):
+            i += 1
+            continue
+        if stripped.startswith('"""') or stripped.startswith("'''"):
+            quote = '"""' if stripped.startswith('"""') else "'''"
+            # Check if line is just the opening quotes (multi-line docstring)
+            if stripped == quote:
+                # Multi-line: next line has the summary
+                if i + 1 < len(lines):
+                    next_line = lines[i + 1].strip()
+                    if next_line and not next_line.startswith(quote):
+                        return next_line
+                return ""
+            else:
+                # Same-line docstring
+                return stripped.strip('"').strip("'").strip()
+        if stripped.startswith("#"):
+            return stripped.lstrip("#").strip()
+        break
+    return ""
+
+
+def load_scripts_catalog(claude_space: Path, dashboard_visualizer_dir: Path) -> list:
+    """Script Tray data source (2026-08-05). Unlike skills (which have a
+    SKILL.md frontmatter convention), there is no metadata convention for
+    scripts yet - this reads only what can be honestly determined from
+    the filesystem: every */scripts/*.py and */scripts/*.sh under
+    claude_space, plus this repo's (dashboard_visualizer_dir) own
+    scripts/*.py and scripts/*.sh. No call-count/usage-log fields (no
+    such log exists for scripts) - deliberately narrower than
+    load_skills_catalog, not a placeholder for later."""
+    scripts = []
+
+    def add_scripts_from(scripts_dir: Path, project_name: str):
+        entries = list(scripts_dir.glob("*.py")) + list(scripts_dir.glob("*.sh"))
+        for script_path in sorted(entries):
+            try:
+                text = script_path.read_text(errors="ignore")
+            except OSError:
+                text = ""
+            try:
+                updated_hours_ago = round(
+                    (datetime.now() - datetime.fromtimestamp(script_path.stat().st_mtime)).total_seconds() / 3600, 1
+                )
+            except OSError:
+                updated_hours_ago = None
+            scripts.append({
+                "name": script_path.stem,
+                "project": project_name,
+                "path": f"{project_name}/scripts/{script_path.name}",
+                "description": _script_description(text),
+                "updated_hours_ago": updated_hours_ago,
+            })
+
+    for scripts_dir in sorted(claude_space.glob("*/scripts")):
+        if scripts_dir.is_dir():
+            add_scripts_from(scripts_dir, scripts_dir.parent.name)
+
+    own_scripts_dir = dashboard_visualizer_dir / "scripts"
+    if own_scripts_dir.is_dir():
+        add_scripts_from(own_scripts_dir, dashboard_visualizer_dir.name)
+
+    return sorted(scripts, key=lambda s: (s["project"], s["name"]))
+
+
 def load_skills_catalog(claude_space: Path) -> list:
     """Skills Tray data source (2026-08-04), per Ian: "i want to visualize
     and keep track of how often they are getting run and brief
@@ -1483,6 +1558,7 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
         "sections": sections,
         "needs_attention": parse_needs_ian_items(needs_ian_text),
         "skills": load_skills_catalog(claude_space),
+        "scripts": load_scripts_catalog(claude_space, script_dir.parent),
     }
 
 

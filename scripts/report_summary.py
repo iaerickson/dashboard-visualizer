@@ -30,6 +30,8 @@ ClaudeSpace checkout, or before either automation has run once) - the
 widget is expected to handle that the same way status_summary.py's own
 optional fields already are handled (see claudespace-status/index.jsx).
 """
+from __future__ import annotations
+
 import json
 import re
 import sys
