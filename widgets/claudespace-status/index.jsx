@@ -1384,7 +1384,7 @@ const resetAllTrays = (cardEl) => {
 // so the tray's enter/exit rides the exact same state change and timing
 // as the rest of big mode - unchanged from the previous round, see that
 // history for the full reasoning.
-const skillsTrayBox = css`
+const trayBoxStyles = (accentColor) => css`
   position: absolute;
   top: 0;
   left: -84px;
@@ -1472,8 +1472,8 @@ const skillsTrayBox = css`
     inset: 0;
     background-image: repeating-linear-gradient(
       45deg,
-      color-mix(in srgb, ${STATUS_RED} 8%, transparent) 0px,
-      color-mix(in srgb, ${STATUS_RED} 8%, transparent) 5px,
+      color-mix(in srgb, ${accentColor} 8%, transparent) 0px,
+      color-mix(in srgb, ${accentColor} 8%, transparent) 5px,
       transparent 5px,
       transparent 11px
     );
@@ -1500,7 +1500,7 @@ const skillsTrayBox = css`
 // effect makes the COLLAPSED pill shorter and closer to circular, which
 // is arguably closer to the tray's own original "half circle" pitch than
 // the tall capsule this had drifted into.
-const skillsTrayHandleZone = css`
+const trayHandleZone = css`
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -1518,7 +1518,7 @@ const skillsTrayHandleZone = css`
 // first place), and it doesn't require relocating the tray itself off the
 // left edge, which would reopen the overlap/placement problems already
 // solved for that position.
-const skillsTabLabel = css`
+const trayLabel = css`
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1535,10 +1535,10 @@ const skillsTabLabel = css`
 // NERV_LINE's own recipe (35% tint over transparent) so hairline borders
 // inside the tray match the weight of every other line in this file.
 const RED_LINE = `color-mix(in srgb, ${STATUS_RED} 35%, transparent)`
-const skillsTabCount = css`
+const trayCountStyles = (accentColor) => css`
   font-size: 12px;
   font-weight: 700;
-  color: ${STATUS_RED};
+  color: ${accentColor};
 `
 
 // Cascades DOWN below the header zone, same grid 0fr->1fr reveal language
@@ -1549,7 +1549,7 @@ const skillsTabCount = css`
 // the second child in `skillsTrayBox`'s flex column, sharing the box's
 // background/border/width automatically since it's part of the same
 // element now.
-const skillsTrayListGrid = css`
+const trayListGrid = css`
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
@@ -1557,7 +1557,7 @@ const skillsTrayListGrid = css`
   transition: grid-template-rows 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
 `
 
-const skillsTrayListInner = css`
+const trayListInner = css`
   overflow: hidden;
   min-height: 0;
   max-height: 420px;
@@ -2093,12 +2093,12 @@ const SkillHexGrid = ({ skills }) => (
 // onMouseLeave also resets any active hex overlay (2026-08-04) - per Ian:
 // "if you leave the skill tray it just resets." Same handler, just one
 // more call alongside the existing armCollapse.
-const SkillsTab = ({ skills }) => {
-  if (!skills || skills.length === 0) return null
+const Tray = ({ id, accentColor, label, count, children }) => {
+  if (!count) return null
   return (
     <div
-      className={`tray-wrap ${skillsTrayBox}`}
-      data-tray-id="skills"
+      className={`tray-wrap ${trayBoxStyles(accentColor)}`}
+      data-tray-id={id}
       onMouseEnter={() => { if (cardNode) disarmCollapse(cardNode) }}
       onMouseLeave={(e) => {
         if (cardNode) armCollapse(cardNode)
@@ -2109,21 +2109,12 @@ const SkillsTab = ({ skills }) => {
           (2026-08-04) - a click anywhere in the now-unified box would
           otherwise bubble up and toggle the tray shut while someone's
           just trying to interact with a row in the open skill list. */}
-      <div className={skillsTrayHandleZone} onClick={(e) => toggleTray("skills", e)}>
-        <span className={skillsTabCount}>{skills.length}</span>
-        <span className={skillsTabLabel}>SKILL TRAY</span>
+      <div className={trayHandleZone} onClick={(e) => toggleTray(id, e)}>
+        <span className={trayCountStyles(accentColor)}>{count}</span>
+        <span className={trayLabel}>{label}</span>
       </div>
-      <div className={`tray-list ${skillsTrayListGrid}`}>
-        <div className={skillsTrayListInner}>
-          {/* Dropped the "N skills" header line entirely now, not just the
-              old "N used" summary (2026-08-04) - per Ian, looking at the
-              open panel live: "dont know if i need to know the 9 skills
-              or have that line there." It was already redundant with the
-              count sitting right above in the handle zone (`skillsTabCount`)
-              every time this panel is open - removing it also closes most
-              of the dead-air gap he flagged at the top of the panel. */}
-          <SkillHexGrid skills={skills} />
-        </div>
+      <div className={`tray-list ${trayListGrid}`}>
+        <div className={trayListInner}>{children}</div>
       </div>
     </div>
   )
@@ -3160,7 +3151,9 @@ export const render = (state) => {
           cardOuter's `is-expanded` class via CSS, so it opens and closes
           in the exact same instant and over the exact same transition as
           everything else in `.expand`. */}
-      <SkillsTab skills={skills} />
+      <Tray id="skills" accentColor={STATUS_RED} label="SKILL TRAY" count={skills.length}>
+        <SkillHexGrid skills={skills} />
+      </Tray>
     </div>
   )
 }
