@@ -1385,11 +1385,9 @@ const resetAllTrays = (cardEl) => {
 // as the rest of big mode - unchanged from the previous round, see that
 // history for the full reasoning.
 const trayBoxStyles = (accentColor) => css`
-  position: absolute;
-  top: 0;
-  left: -84px;
   z-index: 5;
   width: 84px;
+  flex-shrink: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -1406,8 +1404,7 @@ const trayBoxStyles = (accentColor) => css`
   box-shadow: none;
   transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1) 280ms,
     transform 0.5s cubic-bezier(0.16, 1, 0.3, 1) 280ms, width 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-    left 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-radius 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.25s ease, box-shadow 0.25s ease;
+    border-radius 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease, box-shadow 0.25s ease;
 
   .is-expanded & {
     opacity: 1;
@@ -1416,10 +1413,15 @@ const trayBoxStyles = (accentColor) => css`
     transition-delay: 0s;
   }
 
-  /* Grow IN PLACE (2026-08-04) - width and left change together, right
-     edge stays put. This is the whole fix: one shared anchor, one
-     continuous shape, instead of two pieces with independent positioning
-     math that could (and did) drift apart.
+  /* Grow IN PLACE (2026-08-04) - width changes, right edge stays put.
+     Originally this rule owned both width AND left together (one shared
+     anchor, one continuous shape, instead of two pieces with independent
+     positioning math that could and did drift apart); as of Task 5, the
+     "right edge stays put" half of that job moved up to the shared
+     trayColumn wrapper (align-items: flex-end, position: absolute; right:
+     100% on trayColumn itself) so a second tray box can stack under this
+     one without each box re-deriving its own fixed-right-edge math. This
+     rule now only owns width/shape - no position/top/left of its own.
      Background is NOT changed here (2026-08-04, real regression fixed) -
      per Ian: "clear tool bar here is no good." The first merged version
      swapped the solid NERV_BG panel for a near-transparent orange tint on
@@ -1442,7 +1444,6 @@ const trayBoxStyles = (accentColor) => css`
      is-open class, nothing else opens or closes this box. */
   &.is-open {
     width: 272px;
-    left: -272px;
     border-radius: 10px 0 0 10px;
     /* border-color intentionally NOT bumped to full-opacity NERV_ORANGE
        here anymore (2026-08-04) - per Ian: "outter lines of big mode
@@ -1486,6 +1487,30 @@ const trayBoxStyles = (accentColor) => css`
     opacity: 1;
     pointer-events: auto;
   }
+`
+
+// trayColumn (Task 5) - shared wrapper for every tray box (Skill Tray,
+// Script Tray, and whatever comes after), now the sole owner of the
+// "flush against the card's left edge, growing leftward" positioning
+// that used to live on each trayBoxStyles box individually via its own
+// `left: -width`. `right: 100%` anchors the column's own right edge to
+// cardOuter's left edge (cardOuter is `position: relative`, and this is
+// a direct child of it, same relationship trayBoxStyles used to have on
+// its own); `align-items: flex-end` then keeps every tray box's right
+// edge flush with the column's right edge regardless of that box's own
+// width, so a narrow closed pill and a wide open panel still line up on
+// the same edge without either one needing its own left/right math.
+// `flex-direction: column` + `gap` is what makes a second tray
+// automatically stack below the first instead of needing its own
+// absolute top offset.
+const trayColumn = css`
+  position: absolute;
+  top: 0;
+  right: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
 `
 
 // Content-hugging height now, not a fixed 168px (2026-08-04, real bug) -
@@ -2034,6 +2059,42 @@ const renderSkillOverlayBody = (skill) => (
     <div className={skillOverlaySection}>
       <div className={skillOverlayLabel}>Last updated</div>
       <div className={skillOverlayBody}>{formatUpdatedRecency(skill.updated_hours_ago)}</div>
+    </div>
+  </div>
+)
+
+// renderScriptOverlayBody (Task 5) - the Script Tray's own overlay-body
+// renderer, passed to the same generic HexGrid/HexTile the Skill Tray
+// uses. Reuses skillRowName/skillOverlaySection/skillOverlayLabel/
+// skillOverlayBody as-is (same little-header layout, no script-specific
+// variant needed) - only the fields shown differ from
+// renderSkillOverlayBody: script/project/path/summary/last-updated
+// instead of skill/summary/used/called-by/calls/last-updated, matching
+// what load_scripts_catalog (Task 1) actually puts on each script entry.
+const renderScriptOverlayBody = (script) => (
+  <div>
+    <div className={skillRowName} style={{ fontSize: 13 }}>{script.name}</div>
+
+    <div className={skillOverlaySection}>
+      <div className={skillOverlayLabel}>Project</div>
+      <div className={skillOverlayBody}>{script.project}</div>
+    </div>
+
+    <div className={skillOverlaySection}>
+      <div className={skillOverlayLabel}>Path</div>
+      <div className={skillOverlayBody}>{script.path}</div>
+    </div>
+
+    {script.description && (
+      <div className={skillOverlaySection}>
+        <div className={skillOverlayLabel}>Summary</div>
+        <div className={skillOverlayBody}>{script.description}</div>
+      </div>
+    )}
+
+    <div className={skillOverlaySection}>
+      <div className={skillOverlayLabel}>Last updated</div>
+      <div className={skillOverlayBody}>{formatUpdatedRecency(script.updated_hours_ago)}</div>
     </div>
   </div>
 )
@@ -2925,6 +2986,7 @@ export const render = (state) => {
     needs_attention,
     daily_goal,
     skills,
+    scripts,
   } = state
 
   if (loading) {
@@ -3160,14 +3222,24 @@ export const render = (state) => {
           cardOuter's `is-expanded` class via CSS, so it opens and closes
           in the exact same instant and over the exact same transition as
           everything else in `.expand`. */}
-      <Tray id="skills" accentColor={STATUS_RED} label="SKILL TRAY" count={skills.length}>
-        <HexGrid
-          items={skills}
-          accentColor={STATUS_RED}
-          fillPredicate={(s) => s.call_count > 0}
-          renderOverlayBody={renderSkillOverlayBody}
-        />
-      </Tray>
+      <div className={trayColumn}>
+        <Tray id="skills" accentColor={STATUS_RED} label="SKILL TRAY" count={skills.length}>
+          <HexGrid
+            items={skills}
+            accentColor={STATUS_RED}
+            fillPredicate={(s) => s.call_count > 0}
+            renderOverlayBody={renderSkillOverlayBody}
+          />
+        </Tray>
+        <Tray id="scripts" accentColor={STATUS_BLUE} label="SCRIPT TRAY" count={scripts ? scripts.length : 0}>
+          <HexGrid
+            items={scripts || []}
+            accentColor={STATUS_BLUE}
+            fillPredicate={() => true}
+            renderOverlayBody={renderScriptOverlayBody}
+          />
+        </Tray>
+      </div>
     </div>
   )
 }
