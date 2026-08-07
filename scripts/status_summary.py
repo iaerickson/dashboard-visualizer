@@ -64,6 +64,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from report_summary import load_latest_log, load_latest_usage_report, load_persona_nuggets
+
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 STATUS_EMOJI = {
@@ -1559,6 +1561,9 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
         "needs_attention": parse_needs_ian_items(needs_ian_text),
         "skills": load_skills_catalog(claude_space),
         "scripts": load_scripts_catalog(claude_space, script_dir.parent),
+        "log": load_latest_log(claude_space),
+        "report": load_latest_usage_report(claude_space),
+        "nuggets": load_persona_nuggets(claude_space),
     }
 
 
