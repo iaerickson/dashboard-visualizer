@@ -37,8 +37,15 @@ ACTIVE_TO_BACKLOG_DAYS = 3
 
 # Same line shape status_summary.py's parse_index_projects already knows -
 # duplicated rather than imported (these two scripts are meant to stay
-# independently runnable/testable, same reasoning report_summary.py's own
-# small format-parsing helpers don't import from status_summary.py either).
+# independently runnable/testable). NOTE this convention now has one
+# deliberate exception: status_summary.py imports three read-only loader
+# functions (load_latest_log, load_latest_usage_report, load_persona_nuggets)
+# from report_summary.py rather than duplicating them, since both scripts
+# already parse the same ianlogger/usage-scheduler formats. Both scripts
+# still stay independently runnable via their own `if __name__ == "__main__"`
+# - the exception is importing shared read-only helpers, not merging the
+# scripts, so this file's own parsing logic here is still kept separate on
+# purpose.
 PROJECT_LINE_RE = re.compile(r"^-\s+(🟢|🟡|⏸️|🔵|✅)\s+\[([^\]]+)\]\(([^)]+)\)")
 
 

@@ -160,10 +160,10 @@ let cardNode = null
 // "Desktop" / "ClaudeSpace"` when no argument is given (see its own
 // `claude_space = ...` line) - that resolves correctly under a normal
 // shell, but this script's absolute path just above is ALREADY hardcoded
-// rather than left to resolve at runtime, and report-viewer's own
-// `command` (see that widget's index.jsx) already passes this same path
-// explicitly rather than relying on the fallback - this file was the one
-// inconsistent case. Removing the dependency on `Path.home()` resolving
+// rather than left to resolve at runtime, and the now-retired report-viewer
+// widget already passed this same path explicitly rather than relying on
+// the fallback - this file was the one inconsistent case. Removing the
+// dependency on `Path.home()` resolving
 // correctly in whatever environment Übersicht actually runs its `command`
 // shell in closes off a real, if intermittent, failure mode rather than
 // just hoping HOME is always set the way a normal Terminal session sets
@@ -1696,6 +1696,131 @@ const skillOverlayBody = css`
   margin-top: 2px;
 `
 
+// Reports Tray panel styles (2026-08-06) - ported from the standalone
+// report-viewer widget, which this tray retires. Verbatim except
+// reportsPanelHeaderStyles, now a color factory so its header line can
+// carry STATUS_PURPLE (the one deliberate accent touch tying this content
+// to the tray it lives in) - everything else stays the same neutral NERV
+// amber/orange this widget already uses throughout its non-tray content.
+const reportsPanel = css`
+  margin-bottom: 12px;
+  &:last-child {
+    margin-bottom: 0;
+  }
+`
+
+const reportsPanelHeaderStyles = (accentColor) => css`
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: ${accentColor};
+  margin-bottom: 5px;
+`
+
+const reportsPanelMeta = css`
+  font-size: 9px;
+  color: ${NERV_TEXT_DIM};
+  text-transform: none;
+  letter-spacing: 0;
+`
+
+const reportsEmptyNote = css`
+  font-size: 11px;
+  color: ${NERV_TEXT_DIM};
+  font-style: italic;
+`
+
+const reportsLogText = css`
+  font-size: 11px;
+  line-height: 1.5;
+  color: ${NERV_TEXT};
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+
+  &:hover {
+    -webkit-line-clamp: unset;
+  }
+`
+
+const reportsBulletList = css`
+  margin: 0;
+  padding: 0;
+  list-style: none;
+`
+
+const reportsBulletItem = css`
+  font-size: 11px;
+  line-height: 1.4;
+  color: ${NERV_TEXT};
+  margin-bottom: 4px;
+  padding-left: 10px;
+  position: relative;
+
+  &::before {
+    content: "–";
+    position: absolute;
+    left: 0;
+    color: ${NERV_TEXT_DIM};
+  }
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+`
+
+const reportsAttentionBulletItem = css`
+  font-size: 11px;
+  line-height: 1.4;
+  color: ${NERV_TEXT};
+  margin-bottom: 4px;
+  padding-left: 12px;
+  position: relative;
+
+  &::before {
+    content: "!";
+    position: absolute;
+    left: 0;
+    color: ${NERV_ORANGE};
+    font-weight: 700;
+  }
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+`
+
+const reportsMoreNote = css`
+  font-size: 9px;
+  color: ${NERV_TEXT_DIM};
+  margin-top: 3px;
+`
+
+const reportsNuggetPersonaLabel = css`
+  color: ${NERV_ORANGE};
+  font-weight: 600;
+  text-transform: capitalize;
+  font-size: 10px;
+`
+
+const reportsNuggetGroup = css`
+  margin-bottom: 6px;
+  &:last-child {
+    margin-bottom: 0;
+  }
+`
+
+const reportsNuggetEntry = css`
+  font-size: 11px;
+  line-height: 1.4;
+  color: ${NERV_TEXT_DIM};
+  margin-top: 2px;
+`
+
 // Hex grid (2026-08-04), replaced the plain row list, then reworked again
 // the same day - per Ian, sharing two MAGI-terminal reference images:
 // first "could skills populate in big mode like this with the hexagonal
@@ -2369,6 +2494,128 @@ const formatHoursAgo = (hoursAgo) => {
   return `${Math.round(hoursAgo / 24)}d ago`
 }
 
+// formatReportHoursAgo (2026-08-06) - ported from report-viewer/index.jsx's
+// own formatHoursAgo verbatim, including its 48h (not 24h) hour/day
+// cutover - a real, if small, tuned difference from this file's own
+// formatHoursAgo (used for "Last touched: X"), kept as a separate named
+// function rather than unified, since unifying the two thresholds is an
+// unrelated behavior change out of scope for this work.
+const formatReportHoursAgo = (hoursAgo) => {
+  if (hoursAgo == null) return null
+  if (hoursAgo < 1) return `${Math.round(hoursAgo * 60)}m ago`
+  if (hoursAgo < 48) return `${Math.round(hoursAgo)}h ago`
+  return `${Math.round(hoursAgo / 24)}d ago`
+}
+
+// Report titles look like "🌙 Morning Report — for 2026-08-06" - strips the
+// leading emoji (rendered separately/redundantly next to a text label would
+// look odd here) and keeps the rest as-is.
+const cleanReportTitle = (title) => {
+  if (!title) return "Latest report"
+  return title.replace(/^[^\w]+/, "").trim()
+}
+
+// findSection (ported verbatim) - report headings aren't a fixed,
+// guaranteed contract, so this matches by pattern instead of an exact key.
+// Skips empty sections rather than showing an empty panel.
+const findSection = (sections, patterns) => {
+  if (!sections) return null
+  const keys = Object.keys(sections)
+  for (const pattern of patterns) {
+    const key = keys.find((k) => pattern.test(k) && sections[k] && sections[k].length > 0)
+    if (key) return sections[key]
+  }
+  return null
+}
+
+const REPORTS_BULLET_CAP = 3
+
+const ReportsPanels = ({ log, report, nuggets, accentColor }) => {
+  const completed = findSection(report?.sections, [/completed/i])
+  const needsYou = findSection(report?.sections, [/still needs you/i, /needs you/i])
+
+  return (
+    <div>
+      <div className={reportsPanel}>
+        <div className={reportsPanelHeaderStyles(accentColor)}>
+          <span>Today's Log</span>
+          {log && <span className={reportsPanelMeta}>{log.date} · {formatReportHoursAgo(log.hours_ago)}</span>}
+        </div>
+        {log ? (
+          <div className={reportsLogText}>{log.text}</div>
+        ) : (
+          <div className={reportsEmptyNote}>no ianlogger entry yet</div>
+        )}
+      </div>
+
+      <div className={reportsPanel}>
+        <div className={reportsPanelHeaderStyles(accentColor)}>
+          <span>{report ? cleanReportTitle(report.title) : "Latest Report"}</span>
+          {report && <span className={reportsPanelMeta}>{formatReportHoursAgo(report.hours_ago)}</span>}
+        </div>
+        {report ? (
+          <div>
+            {completed && (
+              <ul className={reportsBulletList}>
+                {completed.slice(0, REPORTS_BULLET_CAP).map((item, i) => (
+                  <li className={reportsBulletItem} key={i}>{item}</li>
+                ))}
+              </ul>
+            )}
+            {completed && completed.length > REPORTS_BULLET_CAP && (
+              <div className={reportsMoreNote}>+{completed.length - REPORTS_BULLET_CAP} more completed</div>
+            )}
+            {needsYou && (
+              <ul className={reportsBulletList} style={{ marginTop: completed ? 8 : 0 }}>
+                {needsYou.slice(0, REPORTS_BULLET_CAP).map((item, i) => (
+                  <li className={reportsAttentionBulletItem} key={i}>{item}</li>
+                ))}
+              </ul>
+            )}
+            {needsYou && needsYou.length > REPORTS_BULLET_CAP && (
+              <div className={reportsMoreNote}>+{needsYou.length - REPORTS_BULLET_CAP} more needs you</div>
+            )}
+            {!completed && !needsYou && <div className={reportsEmptyNote}>nothing to report</div>}
+          </div>
+        ) : (
+          <div className={reportsEmptyNote}>no usage-scheduler report yet</div>
+        )}
+      </div>
+
+      {nuggets && nuggets.length > 0 && (
+        <div className={reportsPanel}>
+          <div className={reportsPanelHeaderStyles(accentColor)}>
+            <span>Recent Nuggets</span>
+          </div>
+          {nuggets.map((n) => (
+            <div className={reportsNuggetGroup} key={n.persona}>
+              <span className={reportsNuggetPersonaLabel}>{n.persona}</span>
+              {n.entries.slice(0, 1).map((entry, i) => (
+                <div className={reportsNuggetEntry} key={i}>{entry}</div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// reportsPillLabel (2026-08-06) - Tray's `count` prop is reused here for a
+// short "how fresh" token instead of an item count (this content isn't a
+// catalog like skills/scripts). Returning a non-empty STRING when data
+// exists and "" when it doesn't means Tray's own unchanged `if (!count)
+// return null` gate works correctly here too - a non-empty string is
+// always truthy in JS even when it reads "0h", unlike the number 0 (which
+// would have wrongly hidden the tray the moment the freshest source was
+// exactly zero hours old). No changes to Tray itself needed.
+const reportsPillLabel = (log, report) => {
+  const hours = [log?.hours_ago, report?.hours_ago].filter((h) => h != null)
+  if (!hours.length) return ""
+  const freshest = Math.min(...hours)
+  return freshest < 1 ? "<1h" : `${Math.round(freshest)}h`
+}
+
 const formatResetCountdown = (daysLeft, hoursLeft) => {
   if (daysLeft <= 0) return `${hoursLeft}h`
   return `${daysLeft}d ${hoursLeft}h`
@@ -3018,6 +3265,9 @@ export const render = (state) => {
     daily_goal,
     skills,
     scripts,
+    log,
+    report,
+    nuggets,
   } = state
 
   if (loading) {
@@ -3269,6 +3519,9 @@ export const render = (state) => {
             fillPredicate={() => true}
             renderOverlayBody={renderScriptOverlayBody}
           />
+        </Tray>
+        <Tray id="reports" accentColor={STATUS_PURPLE} label="REPORTS TRAY" count={reportsPillLabel(log, report)}>
+          <ReportsPanels log={log} report={report} nuggets={nuggets} accentColor={STATUS_PURPLE} />
         </Tray>
       </div>
     </div>

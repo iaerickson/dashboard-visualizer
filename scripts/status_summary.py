@@ -53,6 +53,13 @@ Time estimates come from config/project_catalog.json — a cache a Claude
 session fills in (real time-assessor-style judgment isn't something a plain
 script can produce). See dashboard-visualizer/README.md for why this is a
 cache, not a live call: the widget never makes its own LLM calls.
+
+Imports three loader functions from report_summary.py (load_latest_log,
+load_latest_usage_report, load_persona_nuggets) rather than duplicating
+them, since both already parse the same ianlogger/usage-scheduler log and
+report formats — a deliberate exception to this project's normal
+scripts-stay-independent convention (see lifecycle_resort.py's own comment
+on that convention).
 """
 
 from __future__ import annotations
@@ -63,6 +70,8 @@ import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from report_summary import load_latest_log, load_latest_usage_report, load_persona_nuggets
 
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
@@ -1619,6 +1628,9 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
         "needs_attention": parse_needs_ian_items(needs_ian_text),
         "skills": load_skills_catalog(claude_space),
         "scripts": load_scripts_catalog(claude_space, script_dir.parent),
+        "log": load_latest_log(claude_space),
+        "report": load_latest_usage_report(claude_space),
+        "nuggets": load_persona_nuggets(claude_space),
     }
 
 
