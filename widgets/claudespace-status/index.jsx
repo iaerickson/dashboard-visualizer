@@ -160,10 +160,10 @@ let cardNode = null
 // "Desktop" / "ClaudeSpace"` when no argument is given (see its own
 // `claude_space = ...` line) - that resolves correctly under a normal
 // shell, but this script's absolute path just above is ALREADY hardcoded
-// rather than left to resolve at runtime, and report-viewer's own
-// `command` (see that widget's index.jsx) already passes this same path
-// explicitly rather than relying on the fallback - this file was the one
-// inconsistent case. Removing the dependency on `Path.home()` resolving
+// rather than left to resolve at runtime, and the now-retired report-viewer
+// widget already passed this same path explicitly rather than relying on
+// the fallback - this file was the one inconsistent case. Removing the
+// dependency on `Path.home()` resolving
 // correctly in whatever environment Übersicht actually runs its `command`
 // shell in closes off a real, if intermittent, failure mode rather than
 // just hoping HOME is always set the way a normal Terminal session sets
@@ -2571,6 +2571,9 @@ const ReportsPanels = ({ log, report, nuggets, accentColor }) => {
                   <li className={reportsAttentionBulletItem} key={i}>{item}</li>
                 ))}
               </ul>
+            )}
+            {needsYou && needsYou.length > REPORTS_BULLET_CAP && (
+              <div className={reportsMoreNote}>+{needsYou.length - REPORTS_BULLET_CAP} more needs you</div>
             )}
             {!completed && !needsYou && <div className={reportsEmptyNote}>nothing to report</div>}
           </div>

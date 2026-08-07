@@ -213,7 +213,10 @@ else
   OVERALL_OK=1
 fi
 
-# --- 3. report_summary.py runs clean, if it exists (2026-08-04, report-viewer) ---
+# --- 3. report_summary.py runs clean, if it exists (added 2026-08-04 for the
+# now-retired report-viewer widget; now the only automated proof that
+# report_summary.py still runs standalone, since status_summary.py just
+# imports read-only loaders from it rather than exercising it directly) ---
 if [ -f "$REPO_DIR/scripts/report_summary.py" ]; then
   if python3 "$REPO_DIR/scripts/report_summary.py" "$CLAUDE_SPACE" > /dev/null; then
     echo "[ok] report_summary.py runs clean against $CLAUDE_SPACE"

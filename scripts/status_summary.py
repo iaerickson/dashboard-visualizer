@@ -53,6 +53,13 @@ Time estimates come from config/project_catalog.json — a cache a Claude
 session fills in (real time-assessor-style judgment isn't something a plain
 script can produce). See dashboard-visualizer/README.md for why this is a
 cache, not a live call: the widget never makes its own LLM calls.
+
+Imports three loader functions from report_summary.py (load_latest_log,
+load_latest_usage_report, load_persona_nuggets) rather than duplicating
+them, since both already parse the same ianlogger/usage-scheduler log and
+report formats — a deliberate exception to this project's normal
+scripts-stay-independent convention (see lifecycle_resort.py's own comment
+on that convention).
 """
 
 from __future__ import annotations
