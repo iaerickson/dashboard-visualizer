@@ -1696,57 +1696,16 @@ const skillOverlayBody = css`
   margin-top: 2px;
 `
 
-// Reports Tray panel styles (2026-08-06) - ported from the standalone
-// report-viewer widget, which this tray retires. Verbatim except
-// reportsPanelHeaderStyles, now a color factory so its header line can
-// carry STATUS_PURPLE (the one deliberate accent touch tying this content
-// to the tray it lives in) - everything else stays the same neutral NERV
-// amber/orange this widget already uses throughout its non-tray content.
-const reportsPanel = css`
-  margin-bottom: 12px;
-  &:last-child {
-    margin-bottom: 0;
-  }
-`
-
-const reportsPanelHeaderStyles = (accentColor) => css`
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: ${accentColor};
-  margin-bottom: 5px;
-`
-
-const reportsPanelMeta = css`
-  font-size: 9px;
-  color: ${NERV_TEXT_DIM};
-  text-transform: none;
-  letter-spacing: 0;
-`
-
-const reportsEmptyNote = css`
-  font-size: 11px;
-  color: ${NERV_TEXT_DIM};
-  font-style: italic;
-`
-
-const reportsLogText = css`
-  font-size: 11px;
-  line-height: 1.5;
-  color: ${NERV_TEXT};
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-
-  &:hover {
-    -webkit-line-clamp: unset;
-  }
-`
-
+// Reports Tray hex-overlay bullet styles (2026-08-07) - kept from the
+// original panel-based port (2026-08-06) when the tray was rebuilt as hex
+// tiles matching Skill/Script Tray's own format, per Ian: "sorry needs to
+// be hex format like the others." These two list-item treatments (dash
+// bullet vs "!" attention bullet) are genuinely distinct from the shared
+// skillOverlayBody/skillOverlaySection styles the hex overlay otherwise
+// reuses, so they're kept rather than folded away. Everything else from
+// the panel-based version (the always-visible three-panel layout, its own
+// header/meta/empty-state styles) is gone - see renderReportOverlayBody
+// and reportsItems below for what replaced it.
 const reportsBulletList = css`
   margin: 0;
   padding: 0;
@@ -1798,27 +1757,6 @@ const reportsMoreNote = css`
   font-size: 9px;
   color: ${NERV_TEXT_DIM};
   margin-top: 3px;
-`
-
-const reportsNuggetPersonaLabel = css`
-  color: ${NERV_ORANGE};
-  font-weight: 600;
-  text-transform: capitalize;
-  font-size: 10px;
-`
-
-const reportsNuggetGroup = css`
-  margin-bottom: 6px;
-  &:last-child {
-    margin-bottom: 0;
-  }
-`
-
-const reportsNuggetEntry = css`
-  font-size: 11px;
-  line-height: 1.4;
-  color: ${NERV_TEXT_DIM};
-  margin-top: 2px;
 `
 
 // Hex grid (2026-08-04), replaced the plain row list, then reworked again
@@ -2530,90 +2468,131 @@ const findSection = (sections, patterns) => {
 
 const REPORTS_BULLET_CAP = 3
 
-const ReportsPanels = ({ log, report, nuggets, accentColor }) => {
-  const completed = findSection(report?.sections, [/completed/i])
-  const needsYou = findSection(report?.sections, [/still needs you/i, /needs you/i])
+// reportsItems / renderReportOverlayBody (2026-08-07, rebuilt from the
+// panel-based version above) - per Ian: "sorry needs to be hex format like
+// the others." Each hex is now one SOURCE, not one panel: "TODAY'S LOG" and
+// the report's own title are always-present slots (outline when that
+// source has nothing yet, filled once it does - the same used/never-run
+// visual language Skill Tray's call_count already established, and a more
+// honest signal than Script Tray's always-filled compromise, since
+// existence-of-fresh-content is a real yes/no fact here). Nugget personas
+// only get a hex once they actually have entries - load_persona_nuggets
+// already only returns personas with real content, so there's no
+// "outlined nugget slot" to show for the three that haven't started
+// writing yet (matches that function's own honest-empty-state posture).
+const reportsItems = (log, report, nuggets) => {
+  const items = [
+    { key: "log", kind: "log", name: "TODAY'S LOG", available: Boolean(log) },
+    {
+      key: "report",
+      kind: "report",
+      name: report ? cleanReportTitle(report.title) : "LATEST REPORT",
+      available: Boolean(report),
+    },
+  ]
+  ;(nuggets || []).forEach((n) => {
+    items.push({ key: `nugget-${n.persona}`, kind: "nugget", name: n.persona.toUpperCase(), available: true, nugget: n })
+  })
+  return items
+}
 
-  return (
-    <div>
-      <div className={reportsPanel}>
-        <div className={reportsPanelHeaderStyles(accentColor)}>
-          <span>Today's Log</span>
-          {log && <span className={reportsPanelMeta}>{log.date} · {formatReportHoursAgo(log.hours_ago)}</span>}
-        </div>
-        {log ? (
-          <div className={reportsLogText}>{log.text}</div>
+const renderReportOverlayBody = (item, accentColor) => {
+  if (item.kind === "log") {
+    return (
+      <div>
+        <div className={skillRowName} style={{ fontSize: 13 }}>{item.name}</div>
+        {item.available ? (
+          <div className={skillOverlaySection}>
+            <div className={overlayLabelStyles(accentColor)}>{log.date} · {formatReportHoursAgo(log.hours_ago)}</div>
+            <div className={skillOverlayBody}>{log.text}</div>
+          </div>
         ) : (
-          <div className={reportsEmptyNote}>no ianlogger entry yet</div>
+          <div className={skillOverlayBody}>no ianlogger entry yet</div>
         )}
       </div>
+    )
+  }
 
-      <div className={reportsPanel}>
-        <div className={reportsPanelHeaderStyles(accentColor)}>
-          <span>{report ? cleanReportTitle(report.title) : "Latest Report"}</span>
-          {report && <span className={reportsPanelMeta}>{formatReportHoursAgo(report.hours_ago)}</span>}
-        </div>
-        {report ? (
+  if (item.kind === "report") {
+    const completed = findSection(report?.sections, [/completed/i])
+    const needsYou = findSection(report?.sections, [/still needs you/i, /needs you/i])
+    return (
+      <div>
+        <div className={skillRowName} style={{ fontSize: 13 }}>{item.name}</div>
+        {item.available ? (
           <div>
-            {completed && (
-              <ul className={reportsBulletList}>
-                {completed.slice(0, REPORTS_BULLET_CAP).map((item, i) => (
-                  <li className={reportsBulletItem} key={i}>{item}</li>
-                ))}
-              </ul>
+            {report.hours_ago != null && (
+              <div className={skillOverlaySection}>
+                <div className={overlayLabelStyles(accentColor)}>Updated</div>
+                <div className={skillOverlayBody}>{formatReportHoursAgo(report.hours_ago)}</div>
+              </div>
             )}
-            {completed && completed.length > REPORTS_BULLET_CAP && (
-              <div className={reportsMoreNote}>+{completed.length - REPORTS_BULLET_CAP} more completed</div>
+            {completed && (
+              <div className={skillOverlaySection}>
+                <div className={overlayLabelStyles(accentColor)}>Completed</div>
+                <ul className={reportsBulletList}>
+                  {completed.slice(0, REPORTS_BULLET_CAP).map((line, i) => (
+                    <li className={reportsBulletItem} key={i}>{line}</li>
+                  ))}
+                </ul>
+                {completed.length > REPORTS_BULLET_CAP && (
+                  <div className={reportsMoreNote}>+{completed.length - REPORTS_BULLET_CAP} more completed</div>
+                )}
+              </div>
             )}
             {needsYou && (
-              <ul className={reportsBulletList} style={{ marginTop: completed ? 8 : 0 }}>
-                {needsYou.slice(0, REPORTS_BULLET_CAP).map((item, i) => (
-                  <li className={reportsAttentionBulletItem} key={i}>{item}</li>
-                ))}
-              </ul>
+              <div className={skillOverlaySection}>
+                <div className={overlayLabelStyles(accentColor)}>Needs you</div>
+                <ul className={reportsBulletList}>
+                  {needsYou.slice(0, REPORTS_BULLET_CAP).map((line, i) => (
+                    <li className={reportsAttentionBulletItem} key={i}>{line}</li>
+                  ))}
+                </ul>
+                {needsYou.length > REPORTS_BULLET_CAP && (
+                  <div className={reportsMoreNote}>+{needsYou.length - REPORTS_BULLET_CAP} more needs you</div>
+                )}
+              </div>
             )}
-            {needsYou && needsYou.length > REPORTS_BULLET_CAP && (
-              <div className={reportsMoreNote}>+{needsYou.length - REPORTS_BULLET_CAP} more needs you</div>
-            )}
-            {!completed && !needsYou && <div className={reportsEmptyNote}>nothing to report</div>}
+            {!completed && !needsYou && <div className={skillOverlayBody}>nothing to report</div>}
           </div>
         ) : (
-          <div className={reportsEmptyNote}>no usage-scheduler report yet</div>
+          <div className={skillOverlayBody}>no usage-scheduler report yet</div>
         )}
       </div>
+    )
+  }
 
-      {nuggets && nuggets.length > 0 && (
-        <div className={reportsPanel}>
-          <div className={reportsPanelHeaderStyles(accentColor)}>
-            <span>Recent Nuggets</span>
-          </div>
-          {nuggets.map((n) => (
-            <div className={reportsNuggetGroup} key={n.persona}>
-              <span className={reportsNuggetPersonaLabel}>{n.persona}</span>
-              {n.entries.slice(0, 1).map((entry, i) => (
-                <div className={reportsNuggetEntry} key={i}>{entry}</div>
-              ))}
-            </div>
-          ))}
+  // nuggets
+  return (
+    <div>
+      <div className={skillRowName} style={{ fontSize: 13 }}>{item.name}</div>
+      {item.nugget.entries.map((entry, i) => (
+        <div className={skillOverlaySection} key={i}>
+          <div className={skillOverlayBody}>{entry}</div>
         </div>
-      )}
+      ))}
     </div>
   )
 }
 
-// reportsPillLabel (2026-08-06) - Tray's `count` prop is reused here for a
-// short "how fresh" token instead of an item count (this content isn't a
-// catalog like skills/scripts). Returning a non-empty STRING when data
-// exists and "" when it doesn't means Tray's own unchanged `if (!count)
-// return null` gate works correctly here too - a non-empty string is
-// always truthy in JS even when it reads "0h", unlike the number 0 (which
-// would have wrongly hidden the tray the moment the freshest source was
-// exactly zero hours old). No changes to Tray itself needed.
-const reportsPillLabel = (log, report) => {
+// reportsPillLabel (2026-08-06, extended 2026-08-07 for nuggets) - Tray's
+// `count` prop is reused here for a short "how fresh" token instead of an
+// item count (this content isn't a catalog like skills/scripts). Returning
+// a non-empty STRING when data exists and "" when it doesn't means Tray's
+// own unchanged `if (!count) return null` gate works correctly here too -
+// a non-empty string is always truthy in JS even when it reads "0h",
+// unlike the number 0 (which would have wrongly hidden the tray the
+// moment the freshest source was exactly zero hours old). No changes to
+// Tray itself needed. Falls back to a plain bullet when only nuggets have
+// content and neither log nor report has an hours_ago to show - dormant
+// today (no persona writes yet), but correct once one does.
+const reportsPillLabel = (log, report, nuggets) => {
   const hours = [log?.hours_ago, report?.hours_ago].filter((h) => h != null)
-  if (!hours.length) return ""
-  const freshest = Math.min(...hours)
-  return freshest < 1 ? "<1h" : `${Math.round(freshest)}h`
+  if (hours.length) {
+    const freshest = Math.min(...hours)
+    return freshest < 1 ? "<1h" : `${Math.round(freshest)}h`
+  }
+  return nuggets && nuggets.length > 0 ? "•" : ""
 }
 
 const formatResetCountdown = (daysLeft, hoursLeft) => {
@@ -3520,8 +3499,13 @@ export const render = (state) => {
             renderOverlayBody={renderScriptOverlayBody}
           />
         </Tray>
-        <Tray id="reports" accentColor={STATUS_PURPLE} label="REPORTS TRAY" count={reportsPillLabel(log, report)}>
-          <ReportsPanels log={log} report={report} nuggets={nuggets} accentColor={STATUS_PURPLE} />
+        <Tray id="reports" accentColor={STATUS_PURPLE} label="REPORTS TRAY" count={reportsPillLabel(log, report, nuggets)}>
+          <HexGrid
+            items={reportsItems(log, report, nuggets)}
+            accentColor={STATUS_PURPLE}
+            fillPredicate={(item) => item.available}
+            renderOverlayBody={renderReportOverlayBody}
+          />
         </Tray>
       </div>
     </div>
