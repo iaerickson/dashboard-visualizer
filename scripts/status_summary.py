@@ -1022,7 +1022,29 @@ def load_personal_health(config_path: Path, now: datetime) -> dict | None:
     }
 
 
-def project_needs_ian_status(needs_ian_text: str, project: str) -> str:
+GOAL_MATCH_STOPWORDS = frozenset({
+    "the", "a", "an", "and", "or", "but", "not", "no", "yet", "of", "to",
+    "in", "on", "for", "with", "as", "is", "was", "are", "be", "been",
+    "it", "its", "this", "that", "these", "those", "at", "by", "from",
+    "if", "so", "than", "then", "into", "per", "via", "own", "real",
+    "still", "already", "just", "also", "one", "two", "new", "ian",
+    "sign", "off", "signed", "definition", "project",
+})
+
+
+def _goal_match_tokens(text: str, exclude: set[str]) -> set[str]:
+    """Lowercase word/hyphenated-word tokens (>= 3 chars) from `text`, minus
+    generic stopwords and whatever's in `exclude` (typically the project
+    name itself and its hyphen-split parts, so "system-healthcheck" doesn't
+    trivially "match" every entry that mentions the project). Used only by
+    project_needs_ian_status's per-entry disambiguation below - this is a
+    cheap word-overlap heuristic, not real NLP, and is only ever trusted
+    above a minimum shared-word threshold for exactly that reason."""
+    tokens = set(re.findall(r"[a-z0-9][a-z0-9\-]{2,}", text.lower()))
+    return tokens - GOAL_MATCH_STOPWORDS - exclude
+
+
+def project_needs_ian_status(needs_ian_text: str, project: str, goal_text: str = "") -> str:
     """Per-project completion signal for load_daily_goal's per-item tracking
     (2026-08-04), per Ian: "when a goal's real item gets completed the goal
     can remain for the day but have strike thru and move to the bottom."
@@ -1037,15 +1059,35 @@ def project_needs_ian_status(needs_ian_text: str, project: str) -> str:
     telling "resolved" from "never had an entry" is exactly the distinction
     a per-item completion check needs.
 
-    Returns 'open' if any open (🤔/🚧) entry currently references this
-    project, 'resolved' if it has at least one entry and all of them are
-    ✅ Resolved, or 'unknown' if this project has no NEEDS-IAN.md entry at
-    all to check - callers should fall back to the aggregate signal in that
-    case rather than assuming either way."""
+    Per-entry matching (2026-08-06 fix, real bug found live): a project
+    can carry several independent open threads at once -
+    `system-healthcheck`'s stale-project-definition goal signed off and
+    shipped 2026-08-06, but the widget still wouldn't cross it off, because
+    that same project ALSO had two other, unrelated open NEEDS-IAN.md
+    entries (a report-surface decision, a network-blocked dependency pass).
+    The old version aggregated every entry for a project into one
+    has_open/has_resolved pair - "any open entry wins" - so a goal could
+    never read resolved once its own project had ANY other loose end, no
+    matter how unrelated. Now, when a project has more than one entry: each
+    candidate entry is scored against `goal_text` (the goal's own title +
+    detail, passed in by load_daily_goal) by shared significant words -
+    project name and generic stopwords excluded via _goal_match_tokens -
+    and the best-scoring entry's own status is trusted, but ONLY if the
+    match clears a minimum bar (>= 2 shared words). A weak or absent match
+    falls back to 'unknown' rather than guessing - the caller already knows
+    to use the coarser aggregate signal in that case, so understating a
+    match is always safer than fabricating one.
+
+    Returns 'open' if the relevant entry (or, with one entry only, THE
+    entry) referencing this project is 🤔/🚧, 'resolved' if it's ✅, or
+    'unknown' if this project has no NEEDS-IAN.md entry at all, or has
+    several and none can be confidently tied to this specific goal -
+    callers should fall back to the aggregate signal in either case rather
+    than assuming either way."""
     list_section = needs_ian_text.split("## List", 1)
     body = list_section[1] if len(list_section) > 1 else needs_ian_text
-    has_open = False
-    has_resolved = False
+
+    entries: list[tuple[str, str]] = []  # (status, full entry line)
     for line in body.splitlines():
         kind_match = re.match(r"^- (🤔|🚧|✅)", line)
         if not kind_match:
@@ -1053,15 +1095,26 @@ def project_needs_ian_status(needs_ian_text: str, project: str) -> str:
         project_match = PROJECT_NAME_ANYWHERE_RE.search(line)
         if not project_match or project_match.group(1) != project:
             continue
-        if kind_match.group(1) == "✅":
-            has_resolved = True
-        else:
-            has_open = True
-    if has_open:
-        return "open"
-    if has_resolved:
-        return "resolved"
-    return "unknown"
+        status = "resolved" if kind_match.group(1) == "✅" else "open"
+        entries.append((status, line))
+
+    if not entries:
+        return "unknown"
+    if len(entries) == 1:
+        return entries[0][0]
+
+    exclude = {project} | set(project.split("-"))
+    goal_tokens = _goal_match_tokens(goal_text, exclude)
+    if not goal_tokens:
+        return "unknown"
+
+    best_status, best_score = None, 0
+    for status, line in entries:
+        score = len(goal_tokens & _goal_match_tokens(line, exclude))
+        if score > best_score:
+            best_status, best_score = status, score
+
+    return best_status if best_score >= 2 else "unknown"
 
 
 def load_daily_goal(
@@ -1133,10 +1186,14 @@ def load_daily_goal(
     out of the goal's title and checks project_needs_ian_status for it - a
     project with only ✅ Resolved NEEDS-IAN.md entries left is a real,
     specific "this one's done" signal, not just "some equivalent amount of
-    tracker movement happened somewhere." Falls back to the shared aggregate
-    `completed` flag when the title doesn't name a recognizable project, or
-    that project has no NEEDS-IAN.md entry at all to check (status
-    'unknown') - so a goal never regresses to "can't tell" silently, it just
+    tracker movement happened somewhere." (2026-08-06: passes the goal's own
+    title+detail through too, so project_needs_ian_status can tell this
+    goal's own entry apart from a same-project entry about something else
+    entirely - see that function's own docstring for why this exists.)
+    Falls back to the shared aggregate `completed` flag when the title
+    doesn't name a recognizable project, or that project has no NEEDS-IAN.md
+    entry at all to check (status 'unknown') - so a goal never regresses to
+    "can't tell" silently, it just
     inherits the coarser signal instead.
 
     `requires_code` added same follow-up round, per Ian: "it should specify
@@ -1186,7 +1243,10 @@ def load_daily_goal(
     for goal in goals:
         project_match = PROJECT_NAME_ANYWHERE_RE.search(goal["title"] or "")
         project = project_match.group(1) if project_match else None
-        item_status = project_needs_ian_status(needs_ian_text, project) if project else "unknown"
+        goal_text = f"{goal.get('title') or ''} {goal.get('detail') or ''}"
+        item_status = (
+            project_needs_ian_status(needs_ian_text, project, goal_text) if project else "unknown"
+        )
         if item_status == "resolved":
             goal["completed"] = True
         elif item_status == "open":
