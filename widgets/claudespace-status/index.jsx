@@ -2480,24 +2480,39 @@ const REPORTS_BULLET_CAP = 3
 // already only returns personas with real content, so there's no
 // "outlined nugget slot" to show for the three that haven't started
 // writing yet (matches that function's own honest-empty-state posture).
+// `data` carries the actual log/report/nugget object on each item
+// (2026-08-07 fix, real bug) - renderReportOverlayBody is a top-level
+// function, same as renderSkillOverlayBody/renderScriptOverlayBody, so it
+// has NO closure over render(state)'s local log/report/nuggets variables.
+// The first version referenced those names directly inside the "log" and
+// "report" branches and crashed at runtime ("Can't find variable: report")
+// the moment HexTile actually called renderOverlayBody - every hex's
+// overlay content renders unconditionally on every pass (visibility is
+// CSS opacity/pointer-events via .is-active, not conditional JS), so this
+// wasn't a rare-path bug, it broke on the very first render. Fixed the
+// same way renderSkillOverlayBody/renderScriptOverlayBody already work:
+// everything the renderer needs travels on `item` itself, nothing is
+// assumed to be in scope from wherever the item array was built.
 const reportsItems = (log, report, nuggets) => {
   const items = [
-    { key: "log", kind: "log", name: "TODAY'S LOG", available: Boolean(log) },
+    { key: "log", kind: "log", name: "TODAY'S LOG", available: Boolean(log), data: log },
     {
       key: "report",
       kind: "report",
       name: report ? cleanReportTitle(report.title) : "LATEST REPORT",
       available: Boolean(report),
+      data: report,
     },
   ]
   ;(nuggets || []).forEach((n) => {
-    items.push({ key: `nugget-${n.persona}`, kind: "nugget", name: n.persona.toUpperCase(), available: true, nugget: n })
+    items.push({ key: `nugget-${n.persona}`, kind: "nugget", name: n.persona.toUpperCase(), available: true, data: n })
   })
   return items
 }
 
 const renderReportOverlayBody = (item, accentColor) => {
   if (item.kind === "log") {
+    const log = item.data
     return (
       <div>
         <div className={skillRowName} style={{ fontSize: 13 }}>{item.name}</div>
@@ -2514,6 +2529,7 @@ const renderReportOverlayBody = (item, accentColor) => {
   }
 
   if (item.kind === "report") {
+    const report = item.data
     const completed = findSection(report?.sections, [/completed/i])
     const needsYou = findSection(report?.sections, [/still needs you/i, /needs you/i])
     return (
@@ -2566,7 +2582,7 @@ const renderReportOverlayBody = (item, accentColor) => {
   return (
     <div>
       <div className={skillRowName} style={{ fontSize: 13 }}>{item.name}</div>
-      {item.nugget.entries.map((entry, i) => (
+      {item.data.entries.map((entry, i) => (
         <div className={skillOverlaySection} key={i}>
           <div className={skillOverlayBody}>{entry}</div>
         </div>
