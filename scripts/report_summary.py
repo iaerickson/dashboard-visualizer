@@ -72,6 +72,8 @@ def is_unread(viewed_entry: dict, instance_id: str | None = None, mtime: float |
     everything is unread). Pass exactly one of instance_id/mtime; which
     one a source uses is a property of that source's own shape (archive
     vs running-log), not a per-call choice."""
+    if instance_id is not None and mtime is not None:
+        raise ValueError("is_unread requires exactly one of instance_id or mtime, not both")
     if instance_id is not None:
         last_viewed_id = viewed_entry.get("last_viewed_id")
         return last_viewed_id is None or instance_id > last_viewed_id
