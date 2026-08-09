@@ -43,6 +43,44 @@ H1_RE = re.compile(r"^#\s+(.+)$")
 H2_RE = re.compile(r"^##\s+(.+)$")
 
 
+def load_reports_viewed(config_path: Path) -> dict:
+    """Reports Tray v2 (2026-08-08) - reads config/reports_viewed.json, the
+    per-source read/unread watermark. Missing file or malformed JSON both
+    fail open to {} (everything currently unread) - same posture every
+    other config anchor in this codebase already uses, not a special case
+    for this one."""
+    if not config_path.exists():
+        return {}
+    try:
+        data = json.loads(config_path.read_text(errors="ignore"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_reports_viewed(config_path: Path, data: dict) -> None:
+    """Writes config/reports_viewed.json - same plain write_text(json.dumps(...))
+    convention load_session_reset/load_personal_health already use in
+    status_summary.py, no atomic-write dance."""
+    config_path.write_text(json.dumps(data, indent=2))
+
+
+def is_unread(viewed_entry: dict, instance_id: str | None = None, mtime: float | None = None) -> bool:
+    """True if the given instance (by dated id for archive sources, by
+    mtime for running-log sources) is newer than the source's last-viewed
+    watermark - or if there's no watermark at all yet (never viewed, so
+    everything is unread). Pass exactly one of instance_id/mtime; which
+    one a source uses is a property of that source's own shape (archive
+    vs running-log), not a per-call choice."""
+    if instance_id is not None:
+        last_viewed_id = viewed_entry.get("last_viewed_id")
+        return last_viewed_id is None or instance_id > last_viewed_id
+    if mtime is not None:
+        last_viewed_mtime = viewed_entry.get("last_viewed_mtime")
+        return last_viewed_mtime is None or mtime > last_viewed_mtime
+    raise ValueError("is_unread requires exactly one of instance_id or mtime")
+
+
 def find_latest_dated_file(root: Path) -> Path | None:
     """Finds the most recent YYYY-MM-DD.md file across a dated-file archive
     folder - root/*.md for the current month, root/YYYY-MM/*.md for
