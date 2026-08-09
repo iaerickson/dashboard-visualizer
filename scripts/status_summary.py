@@ -71,7 +71,16 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from report_summary import load_latest_log, load_latest_usage_report, load_persona_nuggets
+from report_summary import (
+    load_latest_log,
+    load_latest_usage_report,
+    load_persona_nuggets,
+    load_reports_viewed,
+    list_archive_instances,
+    load_log_entry,
+    load_usage_report_entry,
+    load_dependency_audit_entry,
+)
 
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
@@ -1551,6 +1560,40 @@ def load_skills_catalog(claude_space: Path) -> list:
     return sorted(catalog.values(), key=lambda s: (-s["call_count"], s["name"]))
 
 
+def build_reports_payload(claude_space: Path, script_dir: Path) -> dict:
+    """Reports Tray v2 (2026-08-08) - the uniform {source: {"instances": [...]}}
+    payload the widget's HexGrid consumes directly, one entry per archive
+    source. Running-log sources (skill-auditor, automation-scout) and
+    tip-of-day are a follow-up (Plan B) - this only wires the three
+    sources that already have a clean one-file-per-day archive."""
+    viewed_path = script_dir.parent / "config" / "reports_viewed.json"
+    viewed = load_reports_viewed(viewed_path)
+
+    return {
+        "ianlogger": {
+            "instances": list_archive_instances(
+                claude_space / "ianlogger" / "logs",
+                viewed.get("ianlogger", {}),
+                load_log_entry,
+            )
+        },
+        "usage_scheduler": {
+            "instances": list_archive_instances(
+                claude_space / "usage-scheduler" / "reports",
+                viewed.get("usage_scheduler", {}),
+                load_usage_report_entry,
+            )
+        },
+        "dependency_audit": {
+            "instances": list_archive_instances(
+                claude_space / "dependency-audit" / "reports",
+                viewed.get("dependency_audit", {}),
+                load_dependency_audit_entry,
+            )
+        },
+    }
+
+
 def build_summary(claude_space: Path, script_dir: Path) -> dict:
     index_path = claude_space / "INDEX.md"
     needs_ian_path = claude_space / "NEEDS-IAN.md"
@@ -1631,6 +1674,7 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
         "log": load_latest_log(claude_space),
         "report": load_latest_usage_report(claude_space),
         "nuggets": load_persona_nuggets(claude_space),
+        "reports": build_reports_payload(claude_space, script_dir),
     }
 
 
