@@ -1300,14 +1300,22 @@ const toggleTray = (trayId, e) => {
 // pattern as `toggleTray` above - this file has no React state/hooks
 // available), clearing any previously active hex first so only one overlay
 // is ever showing. Clicking the same hex again toggles it back off.
+// Returns whether the tile is open/active AFTER the toggle (2026-08-08,
+// Reports Tray v2) - previously returned nothing, since no caller needed
+// to know. HexTile's own onClick wrapper (below) uses this to fire
+// onTileSelect only on the transition INTO the open state, never on
+// close - existing callers of toggleHexSelection (there's only the one,
+// HexTile's onClick) never used a return value, so this is a safe,
+// backward-compatible addition.
 const toggleHexSelection = (e) => {
   e.stopPropagation()
   const cell = e.currentTarget
   const wrapEl = cell.closest(".tray-wrap")
-  if (!wrapEl) return
+  if (!wrapEl) return false
   const wasActive = cell.classList.contains("is-active")
   wrapEl.querySelectorAll(".hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
   if (!wasActive) cell.classList.add("is-active")
+  return !wasActive
 }
 
 const resetHexSelection = (wrapEl) => {
@@ -2201,8 +2209,21 @@ const renderScriptOverlayBody = (script, accentColor) => (
 // both of those exist) - just parameterized on `accentColor` instead of
 // hardcoding STATUS_RED, and taking `renderOverlayBody` instead of
 // hardcoding the skill-specific overlay markup.
-const HexTile = ({ item, accentColor, filled, renderOverlayBody }) => (
-  <div className={`hex-cell ${hexCell}`} onClick={toggleHexSelection}>
+// onTileSelect (2026-08-08, Reports Tray v2) - optional, defaults to
+// undefined so Skill Tray/Script Tray's existing call sites (which don't
+// pass it) are completely unaffected. Fires only when a tile transitions
+// INTO the open state (per toggleHexSelection's own new return value),
+// never on close - Reports Tray uses this to mark a hex read the moment
+// its overlay is actually opened, matching how notification-style UIs
+// typically clear on open rather than needing a separate action.
+const HexTile = ({ item, accentColor, filled, renderOverlayBody, onTileSelect }) => (
+  <div
+    className={`hex-cell ${hexCell}`}
+    onClick={(e) => {
+      const isNowOpen = toggleHexSelection(e)
+      if (isNowOpen && onTileSelect) onTileSelect(item)
+    }}
+  >
     <div className={hexOutlineStyles(accentColor)}>
       <div className={hexFill} style={{ background: filled ? accentColor : NERV_BG }}>
         <span className={hexTriangle} style={{ color: filled ? HEX_FILL_TEXT : accentColor }}>▲</span>
@@ -2216,7 +2237,7 @@ const HexTile = ({ item, accentColor, filled, renderOverlayBody }) => (
   </div>
 )
 
-const HexGrid = ({ items, accentColor, fillPredicate, renderOverlayBody }) => (
+const HexGrid = ({ items, accentColor, fillPredicate, renderOverlayBody, onTileSelect }) => (
   <div className={hexWrap}>
     <div className={hexGrid}>
       {chunkIntoColumns(items).map((column, i) => (
@@ -2228,6 +2249,7 @@ const HexGrid = ({ items, accentColor, fillPredicate, renderOverlayBody }) => (
               accentColor={accentColor}
               filled={fillPredicate(item)}
               renderOverlayBody={renderOverlayBody}
+              onTileSelect={onTileSelect}
             />
           ))}
         </div>
