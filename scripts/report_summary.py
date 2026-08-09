@@ -83,37 +83,46 @@ def is_unread(viewed_entry: dict, instance_id: str | None = None, mtime: float |
     raise ValueError("is_unread requires exactly one of instance_id or mtime")
 
 
-def find_latest_dated_file(root: Path) -> Path | None:
-    """Finds the most recent YYYY-MM-DD.md file across a dated-file archive
-    folder - root/*.md for the current month, root/YYYY-MM/*.md for
-    archived months, root/YYYY/YYYY-MM/*.md for archived years (the same
+def list_dated_files(root: Path) -> list:
+    """Every YYYY-MM-DD.md file across a dated-file archive folder -
+    root/*.md for the current month, root/YYYY-MM/*.md for archived
+    months, root/YYYY/YYYY-MM/*.md for archived years (the same
     convention log-rollup already establishes and maintains - see
-    ClaudeSpace/log-rollup). Sorted lexicographically by FILENAME, not
-    mtime - a file's real "date" is what it's named, not when it happened
-    to last be touched (a rollup move can bump mtime without changing what
-    day the entry is actually about)."""
+    ClaudeSpace/log-rollup). Sorted OLDEST TO NEWEST, lexicographically by
+    FILENAME, not mtime - a file's real "date" is what it's named, not
+    when it happened to last be touched (a rollup move can bump mtime
+    without changing what day the entry is actually about).
+
+    Generalized (2026-08-08) from what used to be find_latest_dated_file's
+    single-file lookup - Reports Tray v2's unread-backlog stacking needs
+    every dated instance, not just the newest one, to know what's unread.
+    find_latest_dated_file below is now a thin wrapper over this."""
     candidates = list(root.glob("*.md")) + list(root.glob("*/*.md")) + list(root.glob("*/*/*.md"))
     dated = [p for p in candidates if DATE_RE.match(p.stem)]
-    if not dated:
-        return None
-    return max(dated, key=lambda p: p.stem)
+    return sorted(dated, key=lambda p: p.stem)
 
 
-def load_latest_log(claude_space: Path) -> dict | None:
-    """ianlogger's daily entries are a single narrative write per day (see
-    ianlogger/README.md for its voice/format) - no internal structure to
-    parse, just strip the leading "# YYYY-MM-DD" heading and hand back the
-    body text as-is. The widget itself decides how much of it to show."""
-    logs_dir = claude_space / "ianlogger" / "logs"
-    if not logs_dir.exists():
-        return None
-    latest = find_latest_dated_file(logs_dir)
-    if latest is None:
-        return None
-    text = latest.read_text(errors="ignore").strip()
+def find_latest_dated_file(root: Path) -> Path | None:
+    """The single most recent dated file - see list_dated_files above for
+    the real logic. Kept as its own function since "just the latest" is
+    still exactly what load_latest_log/load_latest_usage_report want for
+    their own "what's current right now" job, unrelated to Reports Tray
+    v2's separate "what's unread" job."""
+    files = list_dated_files(root)
+    return files[-1] if files else None
+
+
+def load_log_entry(path: Path) -> dict:
+    """Parses ONE ianlogger dated entry file, given its path directly (not
+    a directory to search) - extracted (2026-08-08) from load_latest_log
+    so Reports Tray v2's archive-instance enumeration can load any past
+    entry, not just the latest. Strip the leading "# YYYY-MM-DD" heading,
+    hand back the body text as-is - ianlogger writes narrative prose, no
+    internal structure to parse."""
+    text = path.read_text(errors="ignore").strip()
     body_lines = [line for line in text.splitlines() if not H1_RE.match(line.strip())]
     body = "\n\n".join(part.strip() for part in "\n".join(body_lines).split("\n\n") if part.strip())
-    date = latest.stem
+    date = path.stem
     hours_ago = None
     try:
         entry_date = datetime.strptime(date, "%Y-%m-%d")
@@ -125,6 +134,18 @@ def load_latest_log(claude_space: Path) -> dict | None:
         "text": body,
         "hours_ago": round(hours_ago, 1) if hours_ago is not None else None,
     }
+
+
+def load_latest_log(claude_space: Path) -> dict | None:
+    """ianlogger's single most recent entry - see load_log_entry above for
+    the real parsing. Unchanged behavior/signature from before 2026-08-08;
+    now just a thin wrapper so existing callers (status_summary.py's
+    "current log" display) don't need to change."""
+    logs_dir = claude_space / "ianlogger" / "logs"
+    if not logs_dir.exists():
+        return None
+    latest = find_latest_dated_file(logs_dir)
+    return load_log_entry(latest) if latest is not None else None
 
 
 def parse_report_sections(text: str) -> dict:
@@ -150,16 +171,13 @@ def parse_report_sections(text: str) -> dict:
     return sections
 
 
-def load_latest_usage_report(claude_space: Path) -> dict | None:
-    """Reads usage-scheduler/latest-report.md specifically (not the dated
-    reports/ archive) - it's always overwritten with the most recent run
-    (see that file's own header note), so it's the one source that's always
-    current without this script having to do its own dated-file lookup a
-    second time."""
-    report_path = claude_space / "usage-scheduler" / "latest-report.md"
-    if not report_path.exists():
-        return None
-    text = report_path.read_text(errors="ignore")
+def load_usage_report_entry(path: Path) -> dict:
+    """Parses ONE usage-scheduler report file, given its path directly -
+    extracted (2026-08-08) from load_latest_usage_report so Reports Tray
+    v2's archive-instance enumeration can load any past dated report from
+    usage-scheduler/reports/, not just the always-current latest-report.md
+    pointer."""
+    text = path.read_text(errors="ignore")
     title = None
     for line in text.splitlines():
         h1 = H1_RE.match(line.strip())
@@ -167,13 +185,26 @@ def load_latest_usage_report(claude_space: Path) -> dict | None:
             title = h1.group(1).strip()
             break
     sections = parse_report_sections(text)
-    mtime = report_path.stat().st_mtime
+    mtime = path.stat().st_mtime
     hours_ago = (datetime.now().timestamp() - mtime) / 3600
     return {
         "title": title,
         "sections": sections,
         "hours_ago": round(hours_ago, 1),
     }
+
+
+def load_latest_usage_report(claude_space: Path) -> dict | None:
+    """Reads usage-scheduler/latest-report.md specifically (not the dated
+    reports/ archive) - it's always overwritten with the most recent run
+    (see that file's own header note), so it's the one source that's always
+    current without a dated-file lookup. Unchanged behavior/signature from
+    before 2026-08-08 - see load_usage_report_entry above for the real
+    parsing, now shared with Reports Tray v2's archive enumeration."""
+    report_path = claude_space / "usage-scheduler" / "latest-report.md"
+    if not report_path.exists():
+        return None
+    return load_usage_report_entry(report_path)
 
 
 # NUGGET_PERSONAS (2026-08-04), per Ian: report-viewer should "know to pull
@@ -217,6 +248,52 @@ def load_persona_nuggets(claude_space: Path) -> list:
         recent.reverse()
         results.append({"persona": persona, "entries": recent})
     return results
+
+
+def load_dependency_audit_entry(path: Path) -> dict:
+    """Parses ONE dependency-audit report file for Reports Tray v2
+    (2026-08-08) - just the title and the file's own path, no excerpt
+    parsing. dependency-audit's reports are long prose/table documents
+    with no "- " bullet convention parse_report_sections could reuse (its
+    "## The short version" section is paragraphs, not bullets) - rather
+    than build a second, different prose-excerpt parser for one source,
+    v1 keeps this deliberately minimal: enough to identify which report
+    this is and when, not a preview of its findings. Revisit if a real
+    excerpt turns out to matter in practice."""
+    text = path.read_text(errors="ignore")
+    title = None
+    for line in text.splitlines():
+        h1 = H1_RE.match(line.strip())
+        if h1:
+            title = h1.group(1).strip()
+            break
+    return {"title": title or "Dependency Audit", "path": str(path)}
+
+
+def list_archive_instances(archive_dir: Path, viewed_entry: dict, load_content) -> list:
+    """Generic dated-archive instance enumeration for Reports Tray v2
+    (2026-08-08). Returns every unread instance (oldest first, so the
+    widget's own top-to-bottom hex-column order puts the oldest unread one
+    at the top - no separate sort step needed on the JS side) plus the
+    single newest instance even when it's already viewed, so a source
+    with an archive never fully disappears from the tray once it's
+    produced anything at all. `load_content(path) -> dict` is the
+    per-source content loader (load_log_entry, load_usage_report_entry,
+    load_dependency_audit_entry, ...); its returned dict is merged with
+    `id`/`viewed` on each instance. Read state is a single watermark, not
+    a per-instance flag - see is_unread's own docstring."""
+    files = list_dated_files(archive_dir)
+    if not files:
+        return []
+    newest = files[-1]
+    instances = []
+    for path in files:
+        instance_id = path.stem
+        unread = is_unread(viewed_entry, instance_id=instance_id)
+        if unread or path == newest:
+            content = load_content(path)
+            instances.append({"id": instance_id, "viewed": not unread, **content})
+    return instances
 
 
 def build_summary(claude_space: Path) -> dict:
