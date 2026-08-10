@@ -1288,6 +1288,37 @@ const toggleTray = (trayId, e) => {
   if (!opening) resetHexSelection(wrapEl)
   activeTrayId = opening ? trayId : null
   syncTrayListHeight()
+  syncTrayStackOrder()
+}
+
+// syncTrayStackOrder (2026-08-10) - per Ian's exact spec: "if there are
+// N tabs, there are n positions in the stack. they default in current
+// order with skills at position 1. when one tab is hovered, it takes
+// position 1, and all other tabs cascade down to take remaining
+// positions. no tab can share the same position." An open tray outranks
+// a merely-hovered one (only one tray can ever be open at a time, and
+// its siblings are already opacity: 0/non-interactive while it is, so
+// this never actually has to arbitrate between the two in practice) -
+// whichever of those exists becomes position 1, and every OTHER tray
+// keeps its own original relative order behind it, each getting a
+// strictly lower, unique z-index (no ties possible by construction).
+// Clears back to plain CSS (the nth-child baseline) when nothing is
+// hovered or open. Called from every place hover or open state changes
+// (Tray's onMouseEnter/onMouseLeave, toggleTray above) - no interval
+// needed, since nothing external ever changes this state the way new
+// reports can change tray-list height.
+const syncTrayStackOrder = () => {
+  const anyTray = document.querySelector(".tray-wrap")
+  const column = anyTray && anyTray.parentElement
+  if (!column) return
+  const trays = Array.from(column.querySelectorAll(".tray-wrap"))
+  const front = trays.find((t) => t.classList.contains("is-open")) || trays.find((t) => t.classList.contains("is-hovered"))
+  if (!front) {
+    trays.forEach((t) => { t.style.zIndex = "" })
+    return
+  }
+  const ranked = [front, ...trays.filter((t) => t !== front)]
+  ranked.forEach((t, position) => { t.style.zIndex = String(100 - position) })
 }
 
 // toggleHexSelection/resetHexSelection (2026-08-04) - per Ian: "when you
@@ -1364,9 +1395,24 @@ const resetHexSelection = (wrapEl) => {
 const syncTrayListHeight = () => {
   document.querySelectorAll(".tray-wrap.is-open .tray-list-inner").forEach((el) => {
     const activeOverlay = el.querySelector(".hex-cell.is-active .hex-overlay")
-    const contentEl = activeOverlay || el.querySelector(".hex-wrap")
-    if (!contentEl) return
-    const natural = contentEl.scrollHeight
+    // scrollHeight vs offsetHeight (2026-08-10, real bug fix, round 4) -
+    // per Ian's screenshot: the browsing-grid box ballooned to a huge,
+    // mostly-empty size. Verified with a throwaway test page: every
+    // hex's overlay renders its full report text in the DOM at all
+    // times (opacity: 0 when inactive, not display: none), and
+    // .hex-wrap has no overflow property of its own (defaults to
+    // visible) - scrollHeight on a visible-overflow element still
+    // counts its position: absolute descendants' full content,
+    // regardless of opacity, so measuring hexWrap.scrollHeight for the
+    // browsing case was picking up whichever hidden report happened to
+    // be tallest, not the compact grid's own true size (confirmed
+    // empirically: a 3-hex row measured scrollHeight 550 against a real
+    // clientHeight/offsetHeight of 86 for the identical markup). The
+    // active overlay itself has no such descendants, so scrollHeight is
+    // still correct and used there; hexWrap specifically needs
+    // offsetHeight, which reflects only its own actual rendered box.
+    const natural = activeOverlay ? activeOverlay.scrollHeight : el.querySelector(".hex-wrap")?.offsetHeight
+    if (natural == null) return
     el.style.height = `${Math.min(natural, TRAY_LIST_MAX_HEIGHT)}px`
     el.classList.toggle("has-overflow", natural > TRAY_LIST_MAX_HEIGHT)
   })
@@ -1532,29 +1578,27 @@ const trayBoxStyles = (accentColor) => css`
   &:nth-child(7) { z-index: 7; }
   &:nth-child(8) { z-index: 6; }
 
-  /* Stagger hover-to-front (2026-08-10) - per Ian: "the highlighted one
-     will move to the front." The collapsed pills now overlap each other
-     (see TRAY_STAGGER_OVERLAP/trayColumn's own comment) - this bumps
-     z-index so ANY pill, regardless of its default stack position above,
-     can rise above its neighbors to be fully read before you commit to
-     clicking it.
-
-     is-hovered, not :hover (2026-08-10, real bug fix, round 3) - per
-     Ian, still showing Skill Tray on top after two attempts at this
-     with the CSS :hover pseudo-class (a z-index bump, then adding
-     isolation: isolate on the shared parent trayColumn to rule out an
-     ancestor stacking-context conflict). Neither held up live. Rather
-     than keep guessing at why dynamic z-index recalculation on :hover
-     isn't taking visual effect in this specific environment, is-hovered
-     is a plain DOM class toggled from onMouseEnter/onMouseLeave (see
-     Tray below) - the exact same mechanism z-index: 30 on is-open
-     already uses successfully. If a real click-driven class change
-     reliably works and a hover-driven CSS pseudo-class doesn't, the
-     fix is to stop depending on the pseudo-class, not to keep adjusting
-     numbers around it. */
-  &.is-hovered {
-    z-index: 20;
-  }
+  /* Stack ranking now fully JS-driven, not CSS (2026-08-10, real bug fix,
+     round 4) - per Ian's exact spec: "if there are N tabs, there are n
+     positions in the stack. they default in current order with skills
+     at position 1. when one tab is hovered, it takes position 1, and
+     all other tabs cascade down to take remaining positions. no tab can
+     share the same position." Three prior attempts at the hover half of
+     this (a CSS :hover z-index bump, then isolation: isolate on the
+     shared parent, then an is-hovered class bumped by exactly this
+     rule) never held up live - the working theory now is that Übersicht
+     runs its widgets as a non-activating background window, and macOS
+     may simply not deliver continuous mouseenter/mousemove events to a
+     window that's never key/focused, which no amount of CSS or JS
+     inside the page can change. syncTrayStackOrder (see its own
+     comment, near toggleTray) computes the full cascade and writes
+     explicit inline z-index to every tray whenever hover or open state
+     changes - a single ranking function instead of a flat bump here, in
+     case the earlier fixes' real gap was the incomplete ranking model
+     rather than (or in addition to) the event-delivery problem. The
+     nth-child block above stays as the pre-JS/nothing-hovered baseline;
+     inline z-index (set by that function) always wins over it when
+     present. */
 
   /* Grow IN PLACE (2026-08-04) - width changes, right edge stays put.
      Originally this rule owned both width AND left together (one shared
@@ -2665,11 +2709,13 @@ const Tray = ({ id, accentColor, label, count, children }) => {
       onMouseEnter={(e) => {
         if (cardNode) disarmCollapse(cardNode)
         e.currentTarget.classList.add("is-hovered")
+        syncTrayStackOrder()
       }}
       onMouseLeave={(e) => {
         if (cardNode) armCollapse(cardNode)
         e.currentTarget.classList.remove("is-hovered")
         resetHexSelection(e.currentTarget)
+        syncTrayStackOrder()
       }}
     >
       {/* onClick lives on the header zone only, not the whole box
