@@ -2273,6 +2273,23 @@ const hexWrap = css`
   &:has(.hex-cell.is-active) .hex-cell:not(.is-active) {
     visibility: hidden;
   }
+
+  /* 2026-08-10, real bug fix (round 2) - the sibling-hide rule above
+     left the ACTIVE hex's own face (.hex-face) alone, relying entirely
+     on its own overlay to visually cover it. That only works if the
+     overlay's content is at least as tall as the hex's own box - a
+     short report (a brief log entry some days, per ianlogger's own
+     "nothing interesting happened" case) produces a short overlay, and
+     for a hex in the offset honeycomb column that starts partway down
+     hexWrap, the overlay (anchored to hexWrap's own top edge) can end
+     without ever reaching that hex's own lower edge - same garbled
+     peek-through, just from the active hex's own face instead of a
+     sibling's. Its overlay is the whole point of opening it, so hiding
+     the face underneath removes the dependency on the overlay happening
+     to be tall enough entirely. */
+  .hex-cell.is-active .hex-face {
+    visibility: hidden;
+  }
 `
 
 // `flex-direction: row` now (2026-08-04, was `column`) - the grid lays
@@ -2557,7 +2574,7 @@ const HexTile = ({ item, accentColor, filled, renderOverlayBody, onTileSelect })
       if (isNowOpen && onTileSelect) onTileSelect(item)
     }}
   >
-    <div className={hexOutlineStyles(accentColor)}>
+    <div className={`hex-face ${hexOutlineStyles(accentColor)}`}>
       <div className={hexFill} style={{ background: filled ? accentColor : NERV_BG }}>
         <span className={hexTriangle} style={{ color: filled ? HEX_FILL_TEXT : accentColor }}>▲</span>
         <span className={hexLabel} style={{ color: filled ? HEX_FILL_TEXT : accentColor }}>{item.name}</span>
