@@ -1735,8 +1735,20 @@ const trayListInner = css`
      room; overflow-y: auto above still catches anything longer than that.
      Collapses back the moment the hex closes (is-active is removed), so
      the box doesn't sit oversized while just browsing the grid. */
+  /* Fade the bottom edge instead of a hard clip (2026-08-10) - per Ian's
+     screenshot of the reading view: "i dont exactly like the way it cuts
+     off so close to the border." A flat overflow clip ends mid-line with
+     no visual cue there's more below; masking the last ~28px to
+     transparent reads as a soft scroll-shadow instead (the same pattern
+     iOS lists/Gmail use) - real content fades out gracefully rather than
+     being guillotined at the border. Only while a hex is open, same
+     condition as min-height above - the collapsed grid has no overflow
+     to hint at, so masking it there would just fade empty space for no
+     reason. */
   &:has(.hex-cell.is-active) {
     min-height: 420px;
+    mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
   }
 
   &::-webkit-scrollbar {
@@ -2303,7 +2315,7 @@ const hexOverlayStyles = (accentColor) => css`
   z-index: 30;
   background: ${NERV_BG};
   border: 1px solid ${accentColor};
-  padding: 10px;
+  padding: 10px 10px 24px 10px;
   text-align: left;
   opacity: 0;
   pointer-events: none;
