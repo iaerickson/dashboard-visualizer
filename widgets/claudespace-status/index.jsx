@@ -2136,6 +2136,21 @@ const hexLabel = css`
   overflow: hidden;
 `
 
+// hexSubtitle (2026-08-10) - optional small second line under a hex's main
+// label, per Ian's screenshot feedback on Reports Tray: with several
+// stacked instances of the same source (e.g. five IANLOGGER hexes), the
+// face alone couldn't tell them apart without opening each one. Generic
+// on HexTile (below), not Reports-specific - Skill Tray/Script Tray items
+// never set `item.subtitle`, so nothing renders there and nothing about
+// their face changes.
+const hexSubtitle = css`
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+  margin-top: 1px;
+`
+
 const hexOverlayStyles = (accentColor) => css`
   position: absolute;
   inset: 0;
@@ -2266,6 +2281,9 @@ const HexTile = ({ item, accentColor, filled, renderOverlayBody, onTileSelect })
       <div className={hexFill} style={{ background: filled ? accentColor : NERV_BG }}>
         <span className={hexTriangle} style={{ color: filled ? HEX_FILL_TEXT : accentColor }}>▲</span>
         <span className={hexLabel} style={{ color: filled ? HEX_FILL_TEXT : accentColor }}>{item.name}</span>
+        {item.subtitle && (
+          <span className={hexSubtitle} style={{ color: filled ? HEX_FILL_TEXT : accentColor }}>{item.subtitle}</span>
+        )}
         <span className={hexTriangle} style={{ color: filled ? HEX_FILL_TEXT : accentColor }}>▼</span>
       </div>
     </div>
@@ -2528,21 +2546,40 @@ const findSection = (sections, patterns) => {
 
 const REPORTS_BULLET_CAP = 3
 
-// REPORT_SOURCE_LABELS (2026-08-08, Reports Tray v2) - short, fixed hex-face
-// labels replacing the old full-title-truncates-mid-word approach. The
-// real title/date still shows in the overlay (renderReportOverlayBody
+// REPORT_SOURCE_LABELS (2026-08-08, shortened 2026-08-10) - short, fixed
+// hex-face labels. Originally the source's full name ("IANLOGGER",
+// "DEPENDENCY AUDIT") - per Ian's screenshot feedback, single long words
+// with no natural space wrapped mid-word inside hexLabel's 50px box
+// ("IANLOGG"/"ER"). Shortened to single short words that never need to
+// wrap at all, rather than fighting the wrap behavior itself (a real fix
+// there would mean allowing overflow or shrinking the hex, both worse).
+// The real title/date still shows in the overlay (renderReportOverlayBody
 // below), same as every other hex in this tray system already does.
 const REPORT_SOURCE_LABELS = {
-  ianlogger: "IANLOGGER",
-  usage_scheduler: "MORNING REPORT",
-  dependency_audit: "DEPENDENCY AUDIT",
+  ianlogger: "LOG",
+  usage_scheduler: "REPORT",
+  dependency_audit: "AUDIT",
 }
 
-// reportsItems (2026-08-08, rebuilt for Reports Tray v2's uniform payload)
-// - flattens every source's `instances` list into one flat hex-item array.
-// Each item carries `reportSource` (the key mark_report_viewed.py needs)
-// and `id` (the instance's own date) alongside the usual `key`/`kind`/
-// `name`/`data` shape every other hex item in this file already uses.
+// formatHexDate (2026-08-10) - compact MM-DD form of an archive
+// instance's own YYYY-MM-DD id, for the hex face subtitle. Every Plan-A
+// source's id is guaranteed to match that shape (list_dated_files only
+// ever returns files DATE_RE already matched), so a plain slice is safe -
+// no parsing/reformatting needed. Year is dropped since every backlog hex
+// currently visible is recent enough that the month/day alone disambiguates
+// same-source stacks; revisit if a source's backlog ever spans a year
+// boundary in practice.
+const formatHexDate = (id) => (id && id.length >= 10 ? id.slice(5) : id)
+
+// reportsItems (2026-08-08, rebuilt for Reports Tray v2's uniform payload;
+// `subtitle` added 2026-08-10) - flattens every source's `instances` list
+// into one flat hex-item array. Each item carries `reportSource` (the key
+// mark_report_viewed.py needs) and `id` (the instance's own date)
+// alongside the usual `key`/`kind`/`name`/`data` shape every other hex
+// item in this file already uses. `subtitle` is the new compact-date
+// second face line (see hexSubtitle/HexTile) - per Ian, several stacked
+// same-source hexes (e.g. five LOG hexes) were indistinguishable from the
+// outside without opening each one.
 const reportsItems = (reports) => {
   const items = []
   Object.keys(REPORT_SOURCE_LABELS).forEach((source) => {
@@ -2554,6 +2591,7 @@ const reportsItems = (reports) => {
         reportSource: source,
         id: instance.id,
         name: REPORT_SOURCE_LABELS[source],
+        subtitle: formatHexDate(instance.id),
         viewed: instance.viewed,
         data: instance,
       })
