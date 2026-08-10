@@ -1348,18 +1348,24 @@ const toggleHexSelection = (e) => {
   wrapEl.querySelectorAll(".hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
   if (!wasActive) {
     cell.classList.add("is-active")
-    // 2026-08-08 fix (final review, Finding 2): the hex overlay is
-    // `position: absolute; inset: 0` against `hexWrap` (the whole
-    // scrollable grid), not the individual cell - so when a column is
-    // taller than `trayListInner`'s 420px scroll viewport, an overlay
-    // opened near the bottom of a scrolled column renders its content up
-    // at the top of the column, off-screen. Scrolling the containing
-    // `.tray-list` back to the top on open keeps the just-opened overlay's
-    // content in view. Generic and harmless for Skill Tray/Script Tray
-    // too - their own tray-lists are short enough that this is a no-op
-    // there. Left alone on the closing path on purpose - no scroll-jump
-    // when dismissing a hex.
-    const listEl = wrapEl.querySelector(".tray-list")
+    // 2026-08-08 fix (final review, Finding 2), corrected 2026-08-10 -
+    // per Ian: "if clicking a skill and scrolling down, clicking a
+    // different skill locks the scroll bar" and separately "trying to
+    // click an unused skill doesn't let me view or see the summary" -
+    // both the same bug. This always targeted `.tray-list`
+    // (trayListGrid, the outer grid-template-rows: 0fr -> 1fr wrapper),
+    // which never scrolls - `.tray-list-inner` (trayListInner) is the
+    // actual element with overflow-y: auto, so scrollTop = 0 here was
+    // resetting an element that was always already at 0, leaving the
+    // REAL scroll position stuck wherever it was on the previous hex.
+    // Switching from a long skill's overlay (scrolled down) to a short
+    // or never-run one left you scrolled past its brief content into
+    // blank space below it - reading as "the summary won't show" when
+    // the summary was actually rendering fine, just off-screen. Scoped
+    // to the SAME tray-wrap on purpose, not a global querySelector - a
+    // grid with multiple trays (Skill Tray, Script Tray, Reports Tray)
+    // could otherwise reset the wrong one's scroll position.
+    const listEl = wrapEl.querySelector(".tray-list-inner")
     if (listEl) listEl.scrollTop = 0
   }
   syncTrayListHeight()
