@@ -1721,6 +1721,24 @@ const trayListInner = css`
   overflow-y: auto;
   padding: 0 10px 10px 10px;
 
+  /* 2026-08-10, real bug fix - per Ian, after the previous overlay-height
+     fix still read as "too small": "the whole tray box needs to expand."
+     The overlay is position: absolute, so it's out of normal flow and
+     never contributes to this box's own auto-height - with only a couple
+     of collapsed hexes as normal-flow content, this box (and the whole
+     tray-wrap column above it) stayed pinned at the hex grid's own tiny
+     height even though max-height allowed up to 420px, so the overlay had
+     nowhere real to grow into and got clipped by trayBoxStyles' own
+     overflow: hidden with no visible scrollbar. Forcing min-height: 420px
+     only while a hex is open makes this box - and the tray box around it -
+     actually occupy the full available height, giving the overlay real
+     room; overflow-y: auto above still catches anything longer than that.
+     Collapses back the moment the hex closes (is-active is removed), so
+     the box doesn't sit oversized while just browsing the grid. */
+  &:has(.hex-cell.is-active) {
+    min-height: 420px;
+  }
+
   &::-webkit-scrollbar {
     width: 5px;
   }
