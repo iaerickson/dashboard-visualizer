@@ -1413,8 +1413,14 @@ const syncTrayListHeight = () => {
     // offsetHeight, which reflects only its own actual rendered box.
     const natural = activeOverlay ? activeOverlay.scrollHeight : el.querySelector(".hex-wrap")?.offsetHeight
     if (natural == null) return
-    el.style.height = `${Math.min(natural, TRAY_LIST_MAX_HEIGHT)}px`
-    el.classList.toggle("has-overflow", natural > TRAY_LIST_MAX_HEIGHT)
+    // Separate cap for reading vs browsing (2026-08-10) - per Ian, once
+    // the ballooning bug above was fixed: "still kinda ugly... ok to
+    // have a scroll bar when report is selected." One open report
+    // doesn't need the full 9-row browsing allowance - see
+    // READING_MAX_HEIGHT's own comment.
+    const cap = activeOverlay ? READING_MAX_HEIGHT : TRAY_LIST_MAX_HEIGHT
+    el.style.height = `${Math.min(natural, cap)}px`
+    el.classList.toggle("has-overflow", natural > cap)
   })
   document.querySelectorAll(".tray-wrap:not(.is-open) .tray-list-inner").forEach((el) => {
     el.style.height = ""
@@ -1422,15 +1428,16 @@ const syncTrayListHeight = () => {
   })
 }
 
-// Safety-net poll (2026-08-10) - catches backlog growth between clicks:
-// a new unread report can land at any point during Übersicht's own
-// refreshFrequency-driven re-render, well outside toggleHexSelection's
-// own call above. 3s is fast enough that a newly-overflowing tray picks
-// up its scrollbar without a noticeable lag, and cheap enough (one
-// querySelectorAll + a scrollHeight read per tray, a handful of times a
-// minute) that it's not worth wiring into render() itself just to save
-// this interval.
-setInterval(syncTrayListHeight, 3000)
+// No more safety-net poll (2026-08-10, real bug fix, round 5) - the
+// original reasoning ("catches backlog growth between clicks... not
+// worth wiring into render() itself just to save this interval") turned
+// out backwards: render() is now hooked directly (see its own comment),
+// which catches every actual data refresh precisely, and a periodic
+// poll that mutates the DOM every 3 seconds regardless of whether
+// anything changed was the leading suspect for a real glitch Ian caught
+// on screen - a tray left open briefly ballooning to nearly full desktop
+// height for a few frames. Removing the poll entirely removes that
+// suspect; the render() hook covers its original purpose exactly.
 
 // resetAllTrays (2026-08-04, real bug) - per Ian: "when it sometimes
 // goes from mini mode to big mode it still pulls out skills in full tray
@@ -2214,6 +2221,20 @@ const TRAY_LIST_MAX_ROWS = 9
 // sub-pixel rounding so exactly 27 items never spuriously trips
 // has-overflow a hair early.
 const TRAY_LIST_MAX_HEIGHT = TRAY_LIST_MAX_ROWS * HEX_H + HEX_H / 2 + 12 + 10 + 4
+
+// READING_MAX_HEIGHT (2026-08-10) - per Ian, once the box-ballooning bug
+// was actually fixed: "this is better but still kinda ugly... i think
+// its ok to have a scroll bar when report is selected." A single open
+// report doesn't need the same 9-row browsing allowance
+// (TRAY_LIST_MAX_HEIGHT, ~805px) - that number is sized for how many
+// HEXES should fit before scrolling, not how much READING TEXT should.
+// Reusing it made even a short-to-medium report's box look
+// disproportionately tall. A comfortable reading height (this file's
+// original figure for this exact purpose, before the 9-row work
+// widened it) with real scrolling for anything longer - now explicitly
+// fine per Ian - reads better than one shared number trying to serve
+// both jobs.
+const READING_MAX_HEIGHT = 420
 
 // FIXED column count, growth now goes DOWN not RIGHT (2026-08-05, real
 // bug found live via screenshot) - per Ian: "wrong spot to add... if we
@@ -3721,6 +3742,25 @@ const NeedsAttention = ({ needsAttention, needsIanCount }) => {
 }
 
 export const render = (state) => {
+  // Re-sync open trays right after every Übersicht re-render (2026-08-10,
+  // real bug fix, round 5) - per Ian's screenshot, caught mid-glitch: the
+  // open Reports Tray box briefly ballooned to nearly full desktop
+  // height, with "LAST TOUCHED: WELLBEING-CHECK (0M AGO)" visible in the
+  // same frame - a fresh state refresh landing right as it happened.
+  // syncTrayListHeight/syncTrayStackOrder only ran on click, hover, and a
+  // 3s interval - nothing ran immediately after Übersicht patches the DOM
+  // with a fresh render(), so a tray left open across a refresh briefly
+  // fell back to its un-JS-managed CSS state (no inline height, no inline
+  // z-index) until the next interaction or interval tick caught up.
+  // setTimeout(fn, 0) always defers to a later macrotask, after this
+  // function returns and Übersicht's own synchronous DOM patch from this
+  // render has already applied - queuing the sync here closes that gap on
+  // every refresh, not just every 3 seconds.
+  setTimeout(() => {
+    syncTrayListHeight()
+    syncTrayStackOrder()
+  }, 0)
+
   const {
     loading,
     error,
