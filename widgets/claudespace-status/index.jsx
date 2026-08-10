@@ -1460,18 +1460,46 @@ const trayBoxStyles = (accentColor) => css`
     transition-delay: 0s;
   }
 
+  /* Explicit default stacking order (2026-08-10, real bug fix) - per
+     Ian's screenshot: "only 1 tab should only ever be top at a time."
+     Every tray-wrap shared the SAME base z-index (5, above), an exact
+     tie - equal z-index falls back to DOM/paint order to break ties, but
+     that still isn't a deliberate, visible ordering: two overlapping
+     rounded end-caps (see TRAY_STAGGER_OVERLAP's own comment on the
+     overlap itself) each still paint their own border right up to the
+     edge of whichever one "wins" the tie, so the seam reads as two
+     competing curves rather than one pill cleanly tucked behind another.
+     nth-child gives each position in the stack its own explicit,
+     decreasing z-index - trayColumn's only children are tray-wraps, so
+     position in the stack IS position in the deck - guaranteeing exactly
+     one pill is unambiguously frontmost at rest, no tie to break.
+     Covers up to 8 trays, comfortably past the full Plan B vision (7
+     sources) without needing to revisit this when more are added. */
+  &:nth-child(1) { z-index: 13; }
+  &:nth-child(2) { z-index: 12; }
+  &:nth-child(3) { z-index: 11; }
+  &:nth-child(4) { z-index: 10; }
+  &:nth-child(5) { z-index: 9; }
+  &:nth-child(6) { z-index: 8; }
+  &:nth-child(7) { z-index: 7; }
+  &:nth-child(8) { z-index: 6; }
+
   /* Stagger hover-to-front (2026-08-10) - per Ian: "the highlighted one
      will move to the front." The collapsed pills now overlap each other
-     (see TRAY_STAGGER_OVERLAP/trayColumn's own comment), so whichever one
-     is later in DOM order already paints over the one above it by default
-     stacking - this bumps z-index on hover so ANY pill, regardless of its
-     stack position, can rise above its neighbors to be fully read before
-     you commit to clicking it. No position shift, opacity change, or JS -
-     purely a stacking-order bump, safe to layer on top of the existing
-     is-expanded/is-open rules since it only ever raises z-index, never
-     lowers or conflicts with them (an open tray's siblings are already
-     hidden via the sibling-hide rule below, so hover and "is-open" never
-     compete for the same visual moment). */
+     (see TRAY_STAGGER_OVERLAP/trayColumn's own comment) - this bumps
+     z-index on hover so ANY pill, regardless of its default stack
+     position above, can rise above its neighbors to be fully read
+     before you commit to clicking it. No position shift, opacity
+     change, or JS - purely a stacking-order bump, safe to layer on top
+     of the existing is-expanded/is-open rules since it only ever raises
+     z-index, never lowers or conflicts with them (an open tray's
+     siblings are already hidden via the sibling-hide rule below, so
+     hover and "is-open" never compete for the same visual moment). This
+     rule must stay AFTER the nth-child block above in source order -
+     both are single-pseudo-class selectors (equal specificity), so
+     later-in-source is what makes hover correctly win the tie against
+     the default ordering, not just this rule's higher z-index value
+     alone. */
   &:hover {
     z-index: 20;
   }
