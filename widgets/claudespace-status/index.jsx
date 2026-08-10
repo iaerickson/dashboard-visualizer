@@ -2546,19 +2546,24 @@ const findSection = (sections, patterns) => {
 
 const REPORTS_BULLET_CAP = 3
 
-// REPORT_SOURCE_LABELS (2026-08-08, shortened 2026-08-10) - short, fixed
-// hex-face labels. Originally the source's full name ("IANLOGGER",
-// "DEPENDENCY AUDIT") - per Ian's screenshot feedback, single long words
-// with no natural space wrapped mid-word inside hexLabel's 50px box
-// ("IANLOGG"/"ER"). Shortened to single short words that never need to
-// wrap at all, rather than fighting the wrap behavior itself (a real fix
-// there would mean allowing overflow or shrinking the hex, both worse).
-// The real title/date still shows in the overlay (renderReportOverlayBody
-// below), same as every other hex in this tray system already does.
+// REPORT_SOURCE_LABELS (2026-08-08, shortened 2026-08-10, corrected same
+// day) - short, fixed hex-face labels. The real bug in the original
+// "IANLOGGER"/"DEPENDENCY AUDIT" labels was never their length - it was
+// that a single unbroken word with nowhere to wrap gets fragmented
+// mid-word inside hexLabel's 50px box ("IANLOGG"/"ER"). "MORNING REPORT"
+// never had this problem: it already wraps cleanly at the space between
+// two real words. The first fix over-corrected to bare single-word labels
+// ("LOG"/"REPORT"/"AUDIT") that lost the source identity - per Ian, "i
+// should know what log it is." Real fix: keep labels descriptive, just
+// make sure every individual word is short enough (roughly <=7-8 chars at
+// this box width/font) to fit its own line without needing a mid-word
+// break. The real title/date still shows in the overlay
+// (renderReportOverlayBody below), same as every other hex in this tray
+// system already does.
 const REPORT_SOURCE_LABELS = {
-  ianlogger: "LOG",
-  usage_scheduler: "REPORT",
-  dependency_audit: "AUDIT",
+  ianlogger: "IAN LOG",
+  usage_scheduler: "MORNING REPORT",
+  dependency_audit: "DEPS AUDIT",
 }
 
 // formatHexDate (2026-08-10) - compact MM-DD form of an archive
