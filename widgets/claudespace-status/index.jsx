@@ -1314,7 +1314,22 @@ const toggleHexSelection = (e) => {
   if (!wrapEl) return false
   const wasActive = cell.classList.contains("is-active")
   wrapEl.querySelectorAll(".hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
-  if (!wasActive) cell.classList.add("is-active")
+  if (!wasActive) {
+    cell.classList.add("is-active")
+    // 2026-08-08 fix (final review, Finding 2): the hex overlay is
+    // `position: absolute; inset: 0` against `hexWrap` (the whole
+    // scrollable grid), not the individual cell - so when a column is
+    // taller than `trayListInner`'s 420px scroll viewport, an overlay
+    // opened near the bottom of a scrolled column renders its content up
+    // at the top of the column, off-screen. Scrolling the containing
+    // `.tray-list` back to the top on open keeps the just-opened overlay's
+    // content in view. Generic and harmless for Skill Tray/Script Tray
+    // too - their own tray-lists are short enough that this is a no-op
+    // there. Left alone on the closing path on purpose - no scroll-jump
+    // when dismissing a hex.
+    const listEl = wrapEl.querySelector(".tray-list")
+    if (listEl) listEl.scrollTop = 0
+  }
   return !wasActive
 }
 
@@ -2632,7 +2647,7 @@ const markReportViewed = (item) => {
 }
 
 // reportsPillLabel (2026-08-08, rebuilt for Reports Tray v2) - counts
-// unread instances across all three sources instead of computing a
+// total instances across all three sources instead of computing a
 // freshness token. An item COUNT fits this tray's new shape better than
 // v1's "hours since freshest" did, now that there can genuinely be more
 // than one hex per source (the backlog stacking case) - "3" unread is a

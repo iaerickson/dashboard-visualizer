@@ -61,7 +61,10 @@ def load_reports_viewed(config_path: Path) -> dict:
 def save_reports_viewed(config_path: Path, data: dict) -> None:
     """Writes config/reports_viewed.json - same plain write_text(json.dumps(...))
     convention load_session_reset/load_personal_health already use in
-    status_summary.py, no atomic-write dance."""
+    status_summary.py, no atomic-write dance. Ensures config_path's parent
+    directory exists first (2026-08-08 fix) so a fresh checkout without a
+    pre-existing config/ directory doesn't crash on first write."""
+    config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(data, indent=2))
 
 
@@ -275,22 +278,28 @@ def list_archive_instances(archive_dir: Path, viewed_entry: dict, load_content) 
     (2026-08-08). Returns every unread instance (oldest first, so the
     widget's own top-to-bottom hex-column order puts the oldest unread one
     at the top - no separate sort step needed on the JS side) plus the
-    single newest instance even when it's already viewed, so a source
-    with an archive never fully disappears from the tray once it's
-    produced anything at all. `load_content(path) -> dict` is the
-    per-source content loader (load_log_entry, load_usage_report_entry,
-    load_dependency_audit_entry, ...); its returned dict is merged with
-    `id`/`viewed` on each instance. Read state is a single watermark, not
-    a per-instance flag - see is_unread's own docstring."""
+    single newest instance even when it's already viewed (so a source with
+    an archive never fully disappears from the tray once it's produced
+    anything at all), plus whichever instance's id exactly equals the
+    current watermark (`viewed_entry["last_viewed_id"]`) even when that's
+    neither the newest nor unread (2026-08-08 fix - without this, opening
+    an older backlog instance marks it read and it drops out of the very
+    next poll's result, closing its own just-opened overlay out from under
+    you). `load_content(path) -> dict` is the per-source content loader
+    (load_log_entry, load_usage_report_entry, load_dependency_audit_entry,
+    ...); its returned dict is merged with `id`/`viewed` on each instance.
+    Read state is a single watermark, not a per-instance flag - see
+    is_unread's own docstring."""
     files = list_dated_files(archive_dir)
     if not files:
         return []
     newest = files[-1]
+    last_viewed_id = viewed_entry.get("last_viewed_id")
     instances = []
     for path in files:
         instance_id = path.stem
         unread = is_unread(viewed_entry, instance_id=instance_id)
-        if unread or path == newest:
+        if unread or path == newest or instance_id == last_viewed_id:
             content = load_content(path)
             instances.append({"id": instance_id, "viewed": not unread, **content})
     return instances
