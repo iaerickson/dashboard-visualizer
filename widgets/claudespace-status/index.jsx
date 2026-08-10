@@ -2490,148 +2490,137 @@ const findSection = (sections, patterns) => {
 
 const REPORTS_BULLET_CAP = 3
 
-// reportsItems / renderReportOverlayBody (2026-08-07, rebuilt from the
-// panel-based version above) - per Ian: "sorry needs to be hex format like
-// the others." Each hex is now one SOURCE, not one panel: "TODAY'S LOG" and
-// the report's own title are always-present slots (outline when that
-// source has nothing yet, filled once it does - the same used/never-run
-// visual language Skill Tray's call_count already established, and a more
-// honest signal than Script Tray's always-filled compromise, since
-// existence-of-fresh-content is a real yes/no fact here). Nugget personas
-// only get a hex once they actually have entries - load_persona_nuggets
-// already only returns personas with real content, so there's no
-// "outlined nugget slot" to show for the three that haven't started
-// writing yet (matches that function's own honest-empty-state posture).
-// `data` carries the actual log/report/nugget object on each item
-// (2026-08-07 fix, real bug) - renderReportOverlayBody is a top-level
-// function, same as renderSkillOverlayBody/renderScriptOverlayBody, so it
-// has NO closure over render(state)'s local log/report/nuggets variables.
-// The first version referenced those names directly inside the "log" and
-// "report" branches and crashed at runtime ("Can't find variable: report")
-// the moment HexTile actually called renderOverlayBody - every hex's
-// overlay content renders unconditionally on every pass (visibility is
-// CSS opacity/pointer-events via .is-active, not conditional JS), so this
-// wasn't a rare-path bug, it broke on the very first render. Fixed the
-// same way renderSkillOverlayBody/renderScriptOverlayBody already work:
-// everything the renderer needs travels on `item` itself, nothing is
-// assumed to be in scope from wherever the item array was built.
-const reportsItems = (log, report, nuggets) => {
-  const items = [
-    { key: "log", kind: "log", name: "TODAY'S LOG", available: Boolean(log), data: log },
-    {
-      key: "report",
-      kind: "report",
-      name: report ? cleanReportTitle(report.title) : "LATEST REPORT",
-      available: Boolean(report),
-      data: report,
-    },
-  ]
-  ;(nuggets || []).forEach((n) => {
-    items.push({ key: `nugget-${n.persona}`, kind: "nugget", name: n.persona.toUpperCase(), available: true, data: n })
+// REPORT_SOURCE_LABELS (2026-08-08, Reports Tray v2) - short, fixed hex-face
+// labels replacing the old full-title-truncates-mid-word approach. The
+// real title/date still shows in the overlay (renderReportOverlayBody
+// below), same as every other hex in this tray system already does.
+const REPORT_SOURCE_LABELS = {
+  ianlogger: "IANLOGGER",
+  usage_scheduler: "MORNING REPORT",
+  dependency_audit: "DEPENDENCY AUDIT",
+}
+
+// reportsItems (2026-08-08, rebuilt for Reports Tray v2's uniform payload)
+// - flattens every source's `instances` list into one flat hex-item array.
+// Each item carries `reportSource` (the key mark_report_viewed.py needs)
+// and `id` (the instance's own date) alongside the usual `key`/`kind`/
+// `name`/`data` shape every other hex item in this file already uses.
+const reportsItems = (reports) => {
+  const items = []
+  Object.keys(REPORT_SOURCE_LABELS).forEach((source) => {
+    const instances = (reports && reports[source] && reports[source].instances) || []
+    instances.forEach((instance) => {
+      items.push({
+        key: `${source}-${instance.id}`,
+        kind: source,
+        reportSource: source,
+        id: instance.id,
+        name: REPORT_SOURCE_LABELS[source],
+        viewed: instance.viewed,
+        data: instance,
+      })
+    })
   })
   return items
 }
 
 const renderReportOverlayBody = (item, accentColor) => {
-  if (item.kind === "log") {
-    const log = item.data
+  const instance = item.data
+
+  if (item.kind === "ianlogger") {
     return (
       <div>
         <div className={skillRowName} style={{ fontSize: 13 }}>{item.name}</div>
-        {item.available ? (
+        <div className={skillOverlaySection}>
+          <div className={overlayLabelStyles(accentColor)}>{instance.date} · {formatReportHoursAgo(instance.hours_ago)}</div>
+          <div className={skillOverlayBody}>{instance.text}</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (item.kind === "usage_scheduler") {
+    const completed = findSection(instance.sections, [/completed/i])
+    const needsYou = findSection(instance.sections, [/still needs you/i, /needs you/i])
+    return (
+      <div>
+        <div className={skillRowName} style={{ fontSize: 13 }}>{cleanReportTitle(instance.title)}</div>
+        <div className={skillOverlaySection}>
+          <div className={overlayLabelStyles(accentColor)}>{item.id} · {formatReportHoursAgo(instance.hours_ago)}</div>
+        </div>
+        {completed && (
           <div className={skillOverlaySection}>
-            <div className={overlayLabelStyles(accentColor)}>{log.date} · {formatReportHoursAgo(log.hours_ago)}</div>
-            <div className={skillOverlayBody}>{log.text}</div>
+            <div className={overlayLabelStyles(accentColor)}>Completed</div>
+            <ul className={reportsBulletList}>
+              {completed.slice(0, REPORTS_BULLET_CAP).map((line, i) => (
+                <li className={reportsBulletItem} key={i}>{line}</li>
+              ))}
+            </ul>
+            {completed.length > REPORTS_BULLET_CAP && (
+              <div className={reportsMoreNote}>+{completed.length - REPORTS_BULLET_CAP} more completed</div>
+            )}
           </div>
-        ) : (
-          <div className={skillOverlayBody}>no ianlogger entry yet</div>
         )}
+        {needsYou && (
+          <div className={skillOverlaySection}>
+            <div className={overlayLabelStyles(accentColor)}>Needs you</div>
+            <ul className={reportsBulletList}>
+              {needsYou.slice(0, REPORTS_BULLET_CAP).map((line, i) => (
+                <li className={reportsAttentionBulletItem} key={i}>{line}</li>
+              ))}
+            </ul>
+            {needsYou.length > REPORTS_BULLET_CAP && (
+              <div className={reportsMoreNote}>+{needsYou.length - REPORTS_BULLET_CAP} more needs you</div>
+            )}
+          </div>
+        )}
+        {!completed && !needsYou && <div className={skillOverlayBody}>nothing to report</div>}
       </div>
     )
   }
 
-  if (item.kind === "report") {
-    const report = item.data
-    const completed = findSection(report?.sections, [/completed/i])
-    const needsYou = findSection(report?.sections, [/still needs you/i, /needs you/i])
-    return (
-      <div>
-        <div className={skillRowName} style={{ fontSize: 13 }}>{item.name}</div>
-        {item.available ? (
-          <div>
-            {report.hours_ago != null && (
-              <div className={skillOverlaySection}>
-                <div className={overlayLabelStyles(accentColor)}>Updated</div>
-                <div className={skillOverlayBody}>{formatReportHoursAgo(report.hours_ago)}</div>
-              </div>
-            )}
-            {completed && (
-              <div className={skillOverlaySection}>
-                <div className={overlayLabelStyles(accentColor)}>Completed</div>
-                <ul className={reportsBulletList}>
-                  {completed.slice(0, REPORTS_BULLET_CAP).map((line, i) => (
-                    <li className={reportsBulletItem} key={i}>{line}</li>
-                  ))}
-                </ul>
-                {completed.length > REPORTS_BULLET_CAP && (
-                  <div className={reportsMoreNote}>+{completed.length - REPORTS_BULLET_CAP} more completed</div>
-                )}
-              </div>
-            )}
-            {needsYou && (
-              <div className={skillOverlaySection}>
-                <div className={overlayLabelStyles(accentColor)}>Needs you</div>
-                <ul className={reportsBulletList}>
-                  {needsYou.slice(0, REPORTS_BULLET_CAP).map((line, i) => (
-                    <li className={reportsAttentionBulletItem} key={i}>{line}</li>
-                  ))}
-                </ul>
-                {needsYou.length > REPORTS_BULLET_CAP && (
-                  <div className={reportsMoreNote}>+{needsYou.length - REPORTS_BULLET_CAP} more needs you</div>
-                )}
-              </div>
-            )}
-            {!completed && !needsYou && <div className={skillOverlayBody}>nothing to report</div>}
-          </div>
-        ) : (
-          <div className={skillOverlayBody}>no usage-scheduler report yet</div>
-        )}
-      </div>
-    )
-  }
-
-  // nuggets
+  // dependency_audit
   return (
     <div>
       <div className={skillRowName} style={{ fontSize: 13 }}>{item.name}</div>
-      {item.data.entries.map((entry, i) => (
-        <div className={skillOverlaySection} key={i}>
-          <div className={skillOverlayBody}>{entry}</div>
-        </div>
-      ))}
+      <div className={skillOverlaySection}>
+        <div className={overlayLabelStyles(accentColor)}>{instance.title}</div>
+        <div className={skillOverlayBody}>{item.id}</div>
+      </div>
     </div>
   )
 }
 
-// reportsPillLabel (2026-08-06, extended 2026-08-07 for nuggets) - Tray's
-// `count` prop is reused here for a short "how fresh" token instead of an
-// item count (this content isn't a catalog like skills/scripts). Returning
-// a non-empty STRING when data exists and "" when it doesn't means Tray's
-// own unchanged `if (!count) return null` gate works correctly here too -
-// a non-empty string is always truthy in JS even when it reads "0h",
-// unlike the number 0 (which would have wrongly hidden the tray the
-// moment the freshest source was exactly zero hours old). No changes to
-// Tray itself needed. Falls back to a plain bullet when only nuggets have
-// content and neither log nor report has an hours_ago to show - dormant
-// today (no persona writes yet), but correct once one does.
-const reportsPillLabel = (log, report, nuggets) => {
-  const hours = [log?.hours_ago, report?.hours_ago].filter((h) => h != null)
-  if (hours.length) {
-    const freshest = Math.min(...hours)
-    return freshest < 1 ? "<1h" : `${Math.round(freshest)}h`
-  }
-  return nuggets && nuggets.length > 0 ? "•" : ""
+// markReportViewed (2026-08-08, Reports Tray v2) - HexGrid's onTileSelect
+// handler for this tray. Shells out via Übersicht's run() the same way
+// copyPrompt already does for copy-to-clipboard - not a new interaction
+// pattern for this file. No-ops for an already-viewed item (nothing to
+// mark). Absolute paths, same convention CLAUDE_SPACE_FOLDER and this
+// widget's own `command` export already use throughout this file - this
+// is a personal, single-user widget, not meant to be portable.
+const REPORTS_VIEWED_CONFIG_PATH = "/Users/ianerickson/Desktop/Projects/dashboard-visualizer/config/reports_viewed.json"
+const MARK_REPORT_VIEWED_SCRIPT_PATH = "/Users/ianerickson/Desktop/Projects/dashboard-visualizer/scripts/mark_report_viewed.py"
+
+const markReportViewed = (item) => {
+  if (item.viewed) return
+  run(
+    `python3 '${MARK_REPORT_VIEWED_SCRIPT_PATH}' --config '${REPORTS_VIEWED_CONFIG_PATH}' --source '${item.reportSource}' --id '${item.id}'`
+  ).catch(() => {})
 }
+
+// reportsPillLabel (2026-08-08, rebuilt for Reports Tray v2) - counts
+// unread instances across all three sources instead of computing a
+// freshness token. An item COUNT fits this tray's new shape better than
+// v1's "hours since freshest" did, now that there can genuinely be more
+// than one hex per source (the backlog stacking case) - "3" unread is a
+// more useful glance-signal here than which one is freshest. Tray's
+// existing `if (!count) return null` gate works unchanged: 0 unread
+// hides the tray only when there's also nothing to show at all - but the
+// tray should still show once a source has ANY instance (even fully
+// read), same as Skill/Script Tray never hide just because nothing's
+// "new". So this counts TOTAL instances, not just unread ones - matches
+// Tray's existing count semantics (an item count, not a badge count).
+const reportsPillLabel = (reports) => reportsItems(reports).length
 
 const formatResetCountdown = (daysLeft, hoursLeft) => {
   if (daysLeft <= 0) return `${hoursLeft}h`
@@ -3282,9 +3271,7 @@ export const render = (state) => {
     daily_goal,
     skills,
     scripts,
-    log,
-    report,
-    nuggets,
+    reports,
   } = state
 
   if (loading) {
@@ -3537,12 +3524,13 @@ export const render = (state) => {
             renderOverlayBody={renderScriptOverlayBody}
           />
         </Tray>
-        <Tray id="reports" accentColor={STATUS_PURPLE} label="REPORTS TRAY" count={reportsPillLabel(log, report, nuggets)}>
+        <Tray id="reports" accentColor={STATUS_PURPLE} label="REPORTS TRAY" count={reportsPillLabel(reports)}>
           <HexGrid
-            items={reportsItems(log, report, nuggets)}
+            items={reportsItems(reports)}
             accentColor={STATUS_PURPLE}
-            fillPredicate={(item) => item.available}
+            fillPredicate={(item) => !item.viewed}
             renderOverlayBody={renderReportOverlayBody}
+            onTileSelect={markReportViewed}
           />
         </Tray>
       </div>
