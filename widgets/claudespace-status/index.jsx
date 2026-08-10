@@ -1935,9 +1935,32 @@ const SKILL_HEX_COLUMNS = 3
 // dark-on-red regardless of what's underneath.
 const HEX_FILL_TEXT = "#0a0908"
 
-const chunkIntoColumns = (items) => {
+// groupKey (2026-08-09, Reports Tray v2 fix-round) - optional second
+// param, undefined for every existing caller (Skill Tray/Script Tray),
+// so the `if (!groupKey)` branch below is byte-identical to this
+// function's previous unconditional body and those two trays are
+// completely unaffected. When passed (Reports Tray, keyed by
+// `item.reportSource`), each distinct group claims its own column in
+// first-seen order instead of round-robining by flat index - the flat
+// `i % SKILL_HEX_COLUMNS` scheme scattered a source's own multi-instance
+// backlog across different columns, breaking the "oldest unread stacks
+// at the top of its own column" behavior Reports Tray needs.
+const chunkIntoColumns = (items, groupKey) => {
   const columns = Array.from({ length: SKILL_HEX_COLUMNS }, () => [])
-  items.forEach((item, i) => columns[i % SKILL_HEX_COLUMNS].push(item))
+  if (!groupKey) {
+    items.forEach((item, i) => columns[i % SKILL_HEX_COLUMNS].push(item))
+    return columns
+  }
+  const groupToColumn = {}
+  let nextColumn = 0
+  items.forEach((item) => {
+    const key = groupKey(item)
+    if (!(key in groupToColumn)) {
+      groupToColumn[key] = nextColumn % SKILL_HEX_COLUMNS
+      nextColumn += 1
+    }
+    columns[groupToColumn[key]].push(item)
+  })
   return columns
 }
 
@@ -2237,14 +2260,14 @@ const HexTile = ({ item, accentColor, filled, renderOverlayBody, onTileSelect })
   </div>
 )
 
-const HexGrid = ({ items, accentColor, fillPredicate, renderOverlayBody, onTileSelect }) => (
+const HexGrid = ({ items, accentColor, fillPredicate, renderOverlayBody, onTileSelect, groupKey }) => (
   <div className={hexWrap}>
     <div className={hexGrid}>
-      {chunkIntoColumns(items).map((column, i) => (
+      {chunkIntoColumns(items, groupKey).map((column, i) => (
         <div className={hexColumn} key={i}>
           {column.map((item) => (
             <HexTile
-              key={item.path || item.name}
+              key={item.key || item.path || item.name}
               item={item}
               accentColor={accentColor}
               filled={fillPredicate(item)}
@@ -3531,6 +3554,7 @@ export const render = (state) => {
             fillPredicate={(item) => !item.viewed}
             renderOverlayBody={renderReportOverlayBody}
             onTileSelect={markReportViewed}
+            groupKey={(item) => item.reportSource}
           />
         </Tray>
       </div>
