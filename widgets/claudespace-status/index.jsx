@@ -1425,8 +1425,26 @@ const syncTrayListHeight = () => {
     // doesn't need the full 9-row browsing allowance - see
     // READING_MAX_HEIGHT's own comment.
     const cap = activeOverlay ? READING_MAX_HEIGHT : TRAY_LIST_MAX_HEIGHT
-    el.style.height = `${Math.min(natural, cap)}px`
-    el.classList.toggle("has-overflow", natural > cap)
+    // Never shrink below the browsing grid's own height (2026-08-10,
+    // real bug fix, round 6) - per Ian: "window pops up for a second and
+    // then disappears," narrowed down to "only for skills in row 3 or
+    // greater." Root cause: opening a hex low in a tall grid (Skill
+    // Tray's 13 items run 5 rows deep) immediately shrinks this box from
+    // its full browsing height down to the much smaller reading height -
+    // if the hex you clicked sat below where the shrunk box now ends,
+    // your cursor ends up outside tray-wrap's own (now smaller) bounds,
+    // firing the real mouseleave handler, which calls resetHexSelection
+    // and closes the very overlay that just opened. Floor is the grid's
+    // own offsetHeight (0 while just browsing, a no-op there) - reading
+    // a report can only grow this box from its current size, never
+    // shrink it, so the cursor is never pushed outside bounds it was
+    // already inside. Extends the cap to match whenever the floor alone
+    // exceeds it (a tall grid like Skill Tray's), rather than clipping
+    // the grid itself down to a smaller reading-sized cap.
+    const floor = activeOverlay ? (el.querySelector(".hex-wrap")?.offsetHeight || 0) : 0
+    const effectiveCap = Math.max(cap, floor)
+    el.style.height = `${Math.max(floor, Math.min(natural, effectiveCap))}px`
+    el.classList.toggle("has-overflow", natural > effectiveCap)
   })
   document.querySelectorAll(".tray-wrap:not(.is-open) .tray-list-inner").forEach((el) => {
     el.style.height = ""
