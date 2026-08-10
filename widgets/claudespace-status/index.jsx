@@ -1407,10 +1407,34 @@ const resetAllTrays = (cardEl) => {
 // so the tray's enter/exit rides the exact same state change and timing
 // as the rest of big mode - unchanged from the previous round, see that
 // history for the full reasoning.
+// TRAY_STAGGER_OVERLAP (2026-08-10) - per Ian: "i want the tab trays to
+// stagger a lil bit to save space... if more tabs are added we can
+// stagger them more closely." A flat negative margin-top on every
+// tray-wrap (trayBoxStyles, below) pulls each one up to overlap the
+// previous by this many pixels, fanning the collapsed stack instead of
+// each pill taking its own full height below the last. Paired with a
+// matching `padding-top` on trayColumn (further down) rather than just
+// setting the margin alone: `order: -1` (trayBoxStyles' own `.is-open`
+// rule, below) can make ANY tray the visually-first one, not just
+// whichever is first in DOM - margin-top only affects spacing relative
+// to the PREVIOUS flex sibling, so the visually-first item has no
+// previous sibling to overlap and its own negative margin would instead
+// pull it up and out of trayColumn entirely, detached from the card's
+// own top edge. trayColumn's padding-top exactly cancels that for
+// whoever ends up first (0 + padding(N) + margin(-N) = 0, flush with the
+// card top, same as before staggering existed) while every subsequent
+// tray's margin still overlaps the one above it normally. Kept as one
+// named constant, not hand-copied in two places, specifically because
+// Ian's own ask already anticipates tuning it tighter once a 4th/5th
+// tray exists (Plan B) - one number to change, not two that could drift
+// out of sync.
+const TRAY_STAGGER_OVERLAP = 28
+
 const trayBoxStyles = (accentColor) => css`
   z-index: 5;
   width: 84px;
   flex-shrink: 0;
+  margin-top: -${TRAY_STAGGER_OVERLAP}px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -1434,6 +1458,22 @@ const trayBoxStyles = (accentColor) => css`
     transform: rotate(0deg);
     pointer-events: auto;
     transition-delay: 0s;
+  }
+
+  /* Stagger hover-to-front (2026-08-10) - per Ian: "the highlighted one
+     will move to the front." The collapsed pills now overlap each other
+     (see TRAY_STAGGER_OVERLAP/trayColumn's own comment), so whichever one
+     is later in DOM order already paints over the one above it by default
+     stacking - this bumps z-index on hover so ANY pill, regardless of its
+     stack position, can rise above its neighbors to be fully read before
+     you commit to clicking it. No position shift, opacity change, or JS -
+     purely a stacking-order bump, safe to layer on top of the existing
+     is-expanded/is-open rules since it only ever raises z-index, never
+     lowers or conflicts with them (an open tray's siblings are already
+     hidden via the sibling-hide rule below, so hover and "is-open" never
+     compete for the same visual moment). */
+  &:hover {
+    z-index: 20;
   }
 
   /* Grow IN PLACE (2026-08-04) - width changes, right edge stays put.
@@ -1465,7 +1505,25 @@ const trayBoxStyles = (accentColor) => css`
      the click) was still true, so the box stayed stuck open with no
      hover left to explain why. One trigger only now: toggleTray's
      is-open class, nothing else opens or closes this box. */
+  /* order: -1 (2026-08-10) - per Ian: "if clicked or expanded it will
+     move up to the top position... and then flip open and expand as is."
+     trayColumn is a flex column; every tray-wrap defaults to the same
+     order (0, unset), so they render in plain DOM order (Skill,
+     Script, Reports) - giving the OPEN one order: -1 pulls it ahead of
+     every sibling regardless of its own DOM position, with no JS
+     reordering and no measured-position animation needed. The order
+     property itself isn't animatable (it snaps instantly, per the CSS
+     spec), but since width/opacity's own transitions already start
+     immediately with no added delay, the snap-to-top and the grow-open
+     read as one continuous motion in practice - "moves to the top, then
+     flips open" without needing to actually choreograph two separate
+     animation phases in JS. Resets automatically the moment is-open is
+     removed (mini-mode collapse via resetAllTrays, or closing this same
+     tray) - no separate "last active order" state to track, matching
+     Ian's own call that the order should NOT persist across a
+     mini-mode reset. */
   &.is-open {
+    order: -1;
     width: 272px;
     border-radius: 10px 0 0 10px;
     /* border-color intentionally NOT bumped to full-opacity NERV_ORANGE
@@ -1542,6 +1600,10 @@ const trayBoxStyles = (accentColor) => css`
 // declared `opacity`/`transition` properties rather than redeclaring them.
 // Gap dropped from 8px to 0 (Ian: "they can also be right up next to each
 // other") - the two collapsed pills now sit flush when neither is open.
+// TRAY_STAGGER_OVERLAP (defined above, before trayBoxStyles, since that's
+// the first place it's used) pairs with the padding-top below to stagger
+// the collapsed stack - see that constant's own comment for the full
+// margin/padding math.
 const trayColumn = css`
   position: absolute;
   top: 0;
@@ -1549,7 +1611,7 @@ const trayColumn = css`
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0;
+  padding-top: ${TRAY_STAGGER_OVERLAP}px;
   pointer-events: none;
 
   &:has(.tray-wrap.is-open) .tray-wrap:not(.is-open) {
