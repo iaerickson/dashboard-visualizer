@@ -1330,13 +1330,40 @@ const toggleHexSelection = (e) => {
     const listEl = wrapEl.querySelector(".tray-list")
     if (listEl) listEl.scrollTop = 0
   }
+  syncTrayScrollability()
   return !wasActive
 }
 
 const resetHexSelection = (wrapEl) => {
   if (!wrapEl) return
   wrapEl.querySelectorAll(".hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
+  syncTrayScrollability()
 }
+
+// syncTrayScrollability (2026-08-10) - see trayListInner's own comment
+// for why this exists: overflow-y only turns on for a tray-list-inner
+// that genuinely needs it, and there's no CSS selector for "does this
+// box's content overflow it," so this measures the real DOM instead.
+// Called right after anything that can change whether a tray-list-inner
+// needs to scroll (a hex opening/closing changes its min-height; a
+// fresh render can add or remove backlog hexes) - a plain module-level
+// function, same imperative style as toggleHexSelection above, not a
+// React effect (this file has none).
+const syncTrayScrollability = () => {
+  document.querySelectorAll(".tray-list-inner").forEach((el) => {
+    el.classList.toggle("has-overflow", el.scrollHeight > el.clientHeight + 1)
+  })
+}
+
+// Safety-net poll (2026-08-10) - catches backlog growth between clicks:
+// a new unread report can land at any point during Übersicht's own
+// refreshFrequency-driven re-render, well outside toggleHexSelection's
+// own call above. 3s is fast enough that a newly-overflowing tray picks
+// up its scrollbar without a noticeable lag, and cheap enough (one
+// querySelectorAll + a scrollHeight read per tray, a handful of times a
+// minute) that it's not worth wiring into render() itself just to save
+// this interval.
+setInterval(syncTrayScrollability, 3000)
 
 // resetAllTrays (2026-08-04, real bug) - per Ian: "when it sometimes
 // goes from mini mode to big mode it still pulls out skills in full tray
@@ -1726,12 +1753,35 @@ const trayListGrid = css`
   transition: grid-template-rows 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
 `
 
+// overflow-y defaults to hidden, not auto (2026-08-10, real bug fix) -
+// per Ian: "theres no scroll bar but it still scrolls. can we have it
+// stay in space and if there are enough new reports then it scrolls
+// with scroll bar." An always-on overflow-y: auto lets a short list
+// still take scroll-gesture input even with nothing real to scroll
+// (and on macOS's "always show scrollbars" setting, draws a full-track
+// thumb too) - CSS has no selector for "does this box's content
+// actually overflow it," so `has-overflow` (see syncTrayScrollability)
+// is a plain DOM measurement toggling this literal class instead. Only
+// gets added when scrollHeight genuinely exceeds clientHeight, which is
+// the one time this box both allows scrolling and shows a scrollbar -
+// short lists stay fully inert, a real backlog scrolls for real.
 const trayListInner = css`
   overflow: hidden;
   min-height: 0;
   max-height: 420px;
-  overflow-y: auto;
   padding: 0 10px 10px 10px;
+
+  &.has-overflow {
+    overflow-y: auto;
+  }
+
+  &::-webkit-scrollbar {
+    width: 5px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: ${NERV_LINE};
+    border-radius: 2px;
+  }
 
   /* 2026-08-10, real bug fix - per Ian, after the previous overlay-height
      fix still read as "too small": "the whole tray box needs to expand."
@@ -1744,7 +1794,7 @@ const trayListInner = css`
      overflow: hidden with no visible scrollbar. Forcing min-height: 420px
      only while a hex is open makes this box - and the tray box around it -
      actually occupy the full available height, giving the overlay real
-     room; overflow-y: auto above still catches anything longer than that.
+     room; has-overflow above still catches anything longer than that.
      Collapses back the moment the hex closes (is-active is removed), so
      the box doesn't sit oversized while just browsing the grid. */
   /* Fade the bottom edge instead of a hard clip (2026-08-10) - per Ian's
@@ -1761,28 +1811,6 @@ const trayListInner = css`
     min-height: 420px;
     mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
     -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
-  }
-
-  /* Thumb hidden until actually hovered (2026-08-10) - per Ian, twice:
-     "it doesnt need a scroll bar when it only shows this many reports."
-     macOS's "always show scrollbars" setting renders a full-track
-     WebKit scrollbar on any overflow-y: auto box regardless of whether
-     its content actually overflows - a real system-level quirk, not
-     something max-height/overflow values here can detect or prevent.
-     Keeping the track transparent by default and only painting the
-     thumb on hover means it reads as invisible while just glancing at
-     a short list (nothing to scroll, nothing shown) but still gives
-     real visual + functional scroll feedback the moment content
-     genuinely overflows and you mouse over it. */
-  &::-webkit-scrollbar {
-    width: 5px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: transparent;
-    border-radius: 2px;
-  }
-  &:hover::-webkit-scrollbar-thumb {
-    background: ${NERV_LINE};
   }
 `
 
@@ -2546,7 +2574,7 @@ const Tray = ({ id, accentColor, label, count, children }) => {
         <span className={trayLabel}>{label}</span>
       </div>
       <div className={`tray-list ${trayListGrid}`}>
-        <div className={trayListInner}>{children}</div>
+        <div className={`tray-list-inner ${trayListInner}`}>{children}</div>
       </div>
     </div>
   )
