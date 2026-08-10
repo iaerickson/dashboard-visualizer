@@ -2270,26 +2270,26 @@ const hexSubtitle = css`
   margin-top: 1px;
 `
 
+// Width stays tied to hexWrap (top/left/right, same containing block the
+// old inset: 0 used) but height is no longer pinned to it - a single-row
+// grid gives hexWrap almost no natural height, which used to cram the
+// overlay's text into a sliver. Height now grows with content instead,
+// and trayListInner (the actual scroll ancestor, already capped at
+// max-height: 420px) is what scrolls long reports - no separate inner
+// scrollbar needed here.
 const hexOverlayStyles = (accentColor) => css`
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 30;
   background: ${NERV_BG};
   border: 1px solid ${accentColor};
   padding: 10px;
-  overflow-y: auto;
   text-align: left;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
-
-  &::-webkit-scrollbar {
-    width: 4px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: color-mix(in srgb, ${accentColor} 35%, transparent);
-    border-radius: 2px;
-  }
 `
 
 // renderSkillOverlayBody extracted from the old skill-only hex tile
