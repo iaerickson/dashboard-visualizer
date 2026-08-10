@@ -1287,6 +1287,7 @@ const toggleTray = (trayId, e) => {
   wrapEl.classList.toggle("is-open", opening)
   if (!opening) resetHexSelection(wrapEl)
   activeTrayId = opening ? trayId : null
+  syncTrayListHeight()
 }
 
 // toggleHexSelection/resetHexSelection (2026-08-04) - per Ian: "when you
@@ -1330,28 +1331,48 @@ const toggleHexSelection = (e) => {
     const listEl = wrapEl.querySelector(".tray-list")
     if (listEl) listEl.scrollTop = 0
   }
-  syncTrayScrollability()
+  syncTrayListHeight()
   return !wasActive
 }
 
 const resetHexSelection = (wrapEl) => {
   if (!wrapEl) return
   wrapEl.querySelectorAll(".hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
-  syncTrayScrollability()
+  syncTrayListHeight()
 }
 
-// syncTrayScrollability (2026-08-10) - see trayListInner's own comment
-// for why this exists: overflow-y only turns on for a tray-list-inner
-// that genuinely needs it, and there's no CSS selector for "does this
-// box's content overflow it," so this measures the real DOM instead.
-// Called right after anything that can change whether a tray-list-inner
-// needs to scroll (a hex opening/closing changes its min-height; a
-// fresh render can add or remove backlog hexes) - a plain module-level
-// function, same imperative style as toggleHexSelection above, not a
-// React effect (this file has none).
-const syncTrayScrollability = () => {
-  document.querySelectorAll(".tray-list-inner").forEach((el) => {
-    el.classList.toggle("has-overflow", el.scrollHeight > el.clientHeight + 1)
+// syncTrayListHeight (2026-08-10, real bug fix, round 3) - per Ian: "it
+// should expand when clicked but doesnt need to scroll unless there are
+// more than 9 reports... no purpose or utility in scrolling when u can
+// view them all." Two prior attempts (a static max-height, then a forced
+// min-height while a hex was open) both tried to get this box's size
+// right through CSS alone - neither could, since "size to whichever
+// content is currently showing, with one shared cap and nothing else"
+// isn't expressible as a CSS rule (no selector for "does this element's
+// content overflow it," let alone "match this OTHER element's content
+// height"). This sets trayListInner's height directly instead: the
+// active report's own overlay when one is open (its real, natural
+// scrollHeight - however long or short that report actually is), or the
+// hex grid (`.hex-wrap`) when just browsing, capped at
+// TRAY_LIST_MAX_HEIGHT either way - has-overflow only goes on when the
+// real content actually exceeds that cap, which is the one and only
+// time this box scrolls or shows a scrollbar. Closed trays get their
+// inline height cleared, not measured - trayListGrid's own
+// grid-template-rows: 0fr collapse (the tray's open/close animation)
+// needs trayListInner free to shrink to 0 on its own; a stale explicit
+// height from before it closed would fight that squash.
+const syncTrayListHeight = () => {
+  document.querySelectorAll(".tray-wrap.is-open .tray-list-inner").forEach((el) => {
+    const activeOverlay = el.querySelector(".hex-cell.is-active .hex-overlay")
+    const contentEl = activeOverlay || el.querySelector(".hex-wrap")
+    if (!contentEl) return
+    const natural = contentEl.scrollHeight
+    el.style.height = `${Math.min(natural, TRAY_LIST_MAX_HEIGHT)}px`
+    el.classList.toggle("has-overflow", natural > TRAY_LIST_MAX_HEIGHT)
+  })
+  document.querySelectorAll(".tray-wrap:not(.is-open) .tray-list-inner").forEach((el) => {
+    el.style.height = ""
+    el.classList.remove("has-overflow")
   })
 }
 
@@ -1363,7 +1384,7 @@ const syncTrayScrollability = () => {
 // querySelectorAll + a scrollHeight read per tray, a handful of times a
 // minute) that it's not worth wiring into render() itself just to save
 // this interval.
-setInterval(syncTrayScrollability, 3000)
+setInterval(syncTrayListHeight, 3000)
 
 // resetAllTrays (2026-08-04, real bug) - per Ian: "when it sometimes
 // goes from mini mode to big mode it still pulls out skills in full tray
@@ -1514,20 +1535,24 @@ const trayBoxStyles = (accentColor) => css`
   /* Stagger hover-to-front (2026-08-10) - per Ian: "the highlighted one
      will move to the front." The collapsed pills now overlap each other
      (see TRAY_STAGGER_OVERLAP/trayColumn's own comment) - this bumps
-     z-index on hover so ANY pill, regardless of its default stack
-     position above, can rise above its neighbors to be fully read
-     before you commit to clicking it. No position shift, opacity
-     change, or JS - purely a stacking-order bump, safe to layer on top
-     of the existing is-expanded/is-open rules since it only ever raises
-     z-index, never lowers or conflicts with them (an open tray's
-     siblings are already hidden via the sibling-hide rule below, so
-     hover and "is-open" never compete for the same visual moment). This
-     rule must stay AFTER the nth-child block above in source order -
-     both are single-pseudo-class selectors (equal specificity), so
-     later-in-source is what makes hover correctly win the tie against
-     the default ordering, not just this rule's higher z-index value
-     alone. */
-  &:hover {
+     z-index so ANY pill, regardless of its default stack position above,
+     can rise above its neighbors to be fully read before you commit to
+     clicking it.
+
+     is-hovered, not :hover (2026-08-10, real bug fix, round 3) - per
+     Ian, still showing Skill Tray on top after two attempts at this
+     with the CSS :hover pseudo-class (a z-index bump, then adding
+     isolation: isolate on the shared parent trayColumn to rule out an
+     ancestor stacking-context conflict). Neither held up live. Rather
+     than keep guessing at why dynamic z-index recalculation on :hover
+     isn't taking visual effect in this specific environment, is-hovered
+     is a plain DOM class toggled from onMouseEnter/onMouseLeave (see
+     Tray below) - the exact same mechanism z-index: 30 on is-open
+     already uses successfully. If a real click-driven class change
+     reliably works and a hover-driven CSS pseudo-class doesn't, the
+     fix is to stop depending on the pseudo-class, not to keep adjusting
+     numbers around it. */
+  &.is-hovered {
     z-index: 20;
   }
 
@@ -1785,7 +1810,7 @@ const trayListGrid = css`
 // still take scroll-gesture input even with nothing real to scroll
 // (and on macOS's "always show scrollbars" setting, draws a full-track
 // thumb too) - CSS has no selector for "does this box's content
-// actually overflow it," so `has-overflow` (see syncTrayScrollability)
+// actually overflow it," so `has-overflow` (see syncTrayListHeight)
 // is a plain DOM measurement toggling this literal class instead. Only
 // gets added when scrollHeight genuinely exceeds clientHeight, which is
 // the one time this box both allows scrolling and shows a scrollbar -
@@ -1799,6 +1824,21 @@ const trayListGrid = css`
 // styles that need a value computed elsewhere - see trayBoxStyles taking
 // accentColor) sidesteps the ordering issue entirely without relocating
 // HEX_H/HEX_W and the comments already anchored to their position.
+// No min-height for the active-hex case anymore (2026-08-10, real bug
+// fix, round 3) - per Ian: "it should expand when clicked but doesnt
+// need to scroll unless there are more than 9 reports... there is no
+// purpose or utility in scrolling when u can view them all." A forced
+// min-height: 420px (the previous two attempts) reserved that much room
+// the moment any hex opened regardless of how much text it actually
+// held - a short report left real, genuinely empty space below it,
+// which the has-overflow/overflow-y machinery then made scrollable into
+// since the box's own clientHeight (420, from the floor) legitimately
+// exceeded its content's real scrollHeight in the wrong direction for
+// this measurement to catch. There is no CSS-only fix for "size to
+// whichever content is currently showing, browsing grid or one open
+// report, with a single shared cap and nothing else" - so
+// syncTrayListHeight (see its own comment) now sets this box's height
+// explicitly from JS, measuring whichever content is actually visible.
 const trayListInner = () => css`
   overflow: hidden;
   min-height: 0;
@@ -1817,32 +1857,16 @@ const trayListInner = () => css`
     border-radius: 2px;
   }
 
-  /* 2026-08-10, real bug fix - per Ian, after the previous overlay-height
-     fix still read as "too small": "the whole tray box needs to expand."
-     The overlay is position: absolute, so it's out of normal flow and
-     never contributes to this box's own auto-height - with only a couple
-     of collapsed hexes as normal-flow content, this box (and the whole
-     tray-wrap column above it) stayed pinned at the hex grid's own tiny
-     height even though max-height allowed up to 420px, so the overlay had
-     nowhere real to grow into and got clipped by trayBoxStyles' own
-     overflow: hidden with no visible scrollbar. Forcing min-height: 420px
-     only while a hex is open makes this box - and the tray box around it -
-     actually occupy the full available height, giving the overlay real
-     room; has-overflow above still catches anything longer than that.
-     Collapses back the moment the hex closes (is-active is removed), so
-     the box doesn't sit oversized while just browsing the grid. */
   /* Fade the bottom edge instead of a hard clip (2026-08-10) - per Ian's
      screenshot of the reading view: "i dont exactly like the way it cuts
      off so close to the border." A flat overflow clip ends mid-line with
      no visual cue there's more below; masking the last ~28px to
      transparent reads as a soft scroll-shadow instead (the same pattern
      iOS lists/Gmail use) - real content fades out gracefully rather than
-     being guillotined at the border. Only while a hex is open, same
-     condition as min-height above - the collapsed grid has no overflow
-     to hint at, so masking it there would just fade empty space for no
-     reason. */
-  &:has(.hex-cell.is-active) {
-    min-height: 420px;
+     being guillotined at the border. Tied to has-overflow, not to a hex
+     being open - the only time this box has anything to fade AT ALL is
+     when its content (grid or report) genuinely exceeds the cap. */
+  &.has-overflow {
     mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
     -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
   }
@@ -2591,7 +2615,7 @@ const HexTile = ({ item, accentColor, filled, renderOverlayBody, onTileSelect })
 )
 
 const HexGrid = ({ items, accentColor, fillPredicate, renderOverlayBody, onTileSelect, groupKey, serpentine }) => (
-  <div className={hexWrap}>
+  <div className={`hex-wrap ${hexWrap}`}>
     <div className={hexGrid}>
       {chunkIntoColumns(items, groupKey, serpentine).map((column, i) => (
         <div className={hexColumn} key={i}>
@@ -2638,9 +2662,13 @@ const Tray = ({ id, accentColor, label, count, children }) => {
     <div
       className={`tray-wrap ${trayBoxStyles(accentColor)}`}
       data-tray-id={id}
-      onMouseEnter={() => { if (cardNode) disarmCollapse(cardNode) }}
+      onMouseEnter={(e) => {
+        if (cardNode) disarmCollapse(cardNode)
+        e.currentTarget.classList.add("is-hovered")
+      }}
       onMouseLeave={(e) => {
         if (cardNode) armCollapse(cardNode)
+        e.currentTarget.classList.remove("is-hovered")
         resetHexSelection(e.currentTarget)
       }}
     >
