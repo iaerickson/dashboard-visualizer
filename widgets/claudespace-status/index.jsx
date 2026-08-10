@@ -1641,6 +1641,18 @@ const trayColumn = css`
   align-items: flex-end;
   padding-top: ${TRAY_STAGGER_OVERLAP}px;
   pointer-events: none;
+  /* 2026-08-10, real bug fix - per Ian's screenshot: hovering Reports
+     Tray still showed Skill Tray drawn in front. Every tray-wrap child
+     already gets its own stacking context from its transform (see
+     trayBoxStyles), which should be enough for a plain z-index
+     comparison between siblings - but without isolation: isolate
+     here, that comparison ultimately still resolves through whatever
+     stacking context this column happens to sit inside on the page,
+     leaving room for an ancestor layer to interfere. Isolating this
+     column removes that dependency entirely: z-index among tray-wraps
+     is now compared in one stacking context that belongs to nothing
+     but this column. */
+  isolation: isolate;
 
   &:has(.tray-wrap.is-open) .tray-wrap:not(.is-open) {
     opacity: 0;
@@ -1751,12 +1763,26 @@ const trayListInner = css`
     -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
   }
 
+  /* Thumb hidden until actually hovered (2026-08-10) - per Ian, twice:
+     "it doesnt need a scroll bar when it only shows this many reports."
+     macOS's "always show scrollbars" setting renders a full-track
+     WebKit scrollbar on any overflow-y: auto box regardless of whether
+     its content actually overflows - a real system-level quirk, not
+     something max-height/overflow values here can detect or prevent.
+     Keeping the track transparent by default and only painting the
+     thumb on hover means it reads as invisible while just glancing at
+     a short list (nothing to scroll, nothing shown) but still gives
+     real visual + functional scroll feedback the moment content
+     genuinely overflows and you mouse over it. */
   &::-webkit-scrollbar {
     width: 5px;
   }
   &::-webkit-scrollbar-thumb {
-    background: ${NERV_LINE};
+    background: transparent;
     border-radius: 2px;
+  }
+  &:hover::-webkit-scrollbar-thumb {
+    background: ${NERV_LINE};
   }
 `
 
@@ -2142,6 +2168,21 @@ const chunkIntoColumns = (items, groupKey, serpentine) => {
 const hexWrap = css`
   position: relative;
   padding: 2px 4px 10px 4px;
+
+  /* 2026-08-10, real bug fix - per Ian's screenshot: an open report
+     overlay is sized to its own content (see hexOverlayStyles), which
+     can end up shorter than hexWrap's own honeycomb height - a
+     column-offset sibling hex (the ":nth-of-type(even) margin-top"
+     stagger above) then sticks out past the overlay's bottom edge,
+     its clip-path outline visible through the gap and reading as one
+     garbled shape. Hiding every OTHER hex's face while one is open
+     removes anything left to peek through, independent of exactly how
+     tall any given report turns out to be - visibility (not display/
+     opacity) so hexWrap's own layout size doesn't shift underneath the
+     open overlay. */
+  &:has(.hex-cell.is-active) .hex-cell:not(.is-active) {
+    visibility: hidden;
+  }
 `
 
 // `flex-direction: row` now (2026-08-04, was `column`) - the grid lays
