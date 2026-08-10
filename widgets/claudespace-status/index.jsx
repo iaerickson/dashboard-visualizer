@@ -1765,10 +1765,19 @@ const trayListGrid = css`
 // gets added when scrollHeight genuinely exceeds clientHeight, which is
 // the one time this box both allows scrolling and shows a scrollbar -
 // short lists stay fully inert, a real backlog scrolls for real.
-const trayListInner = css`
+// A function now, not a plain const (2026-08-10) - TRAY_LIST_MAX_HEIGHT
+// (defined near HEX_H, further down this file, where the row-height math
+// it depends on already lives) is computed from HEX_H, which isn't
+// defined yet at this point in the file - a plain const here would throw
+// at module load, referencing it before its own declaration runs.
+// Deferring evaluation to call time (this file's existing pattern for
+// styles that need a value computed elsewhere - see trayBoxStyles taking
+// accentColor) sidesteps the ordering issue entirely without relocating
+// HEX_H/HEX_W and the comments already anchored to their position.
+const trayListInner = () => css`
   overflow: hidden;
   min-height: 0;
-  max-height: 420px;
+  max-height: ${TRAY_LIST_MAX_HEIGHT}px;
   padding: 0 10px 10px 10px;
 
   &.has-overflow {
@@ -2086,6 +2095,33 @@ const reportsMoreNote = css`
 const SKILLS_TRAY_HEX_ROW_MAX_WIDTH = 242
 const HEX_W = 94
 const HEX_H = 82
+
+// TRAY_LIST_MAX_ROWS (2026-08-10) - per Ian: "if reports is 3 or less,
+// no scroll bar and fixed box until a report is clicked. Otherwise
+// expand box height appropriate amount for every new row of 3 until
+// rows are >9 then use a scroll bar." trayListInner (way above) already
+// gives "grow with content, then scroll past a cap" for free - it has no
+// min-height of its own in the collapsed state, so it already sizes to
+// exactly however many rows exist, up to whatever max-height allows. The
+// only piece actually missing was picking a cap sized for 9 rows instead
+// of an arbitrary reading-sized one - everything else (fixed/no-scrollbar
+// at 3 or fewer, growing row by row in between) was already this
+// design's natural behavior once that cap is right.
+const TRAY_LIST_MAX_ROWS = 9
+
+// TRAY_LIST_MAX_HEIGHT (2026-08-10) - the pixel height of exactly
+// TRAY_LIST_MAX_ROWS rows, so has-overflow (trayListInner) stays false
+// through row 9 and only starts scrolling at row 10. Column heights: the
+// honeycomb stagger (hexColumn's nth-of-type(even) margin-top: HEX_H / 2)
+// means for R full rows, the middle column's own bottom edge (offset
+// down by HEX_H / 2, same per-column height as the other two) is always
+// the tallest point - TRAY_LIST_MAX_ROWS * HEX_H + HEX_H / 2. Add
+// hexWrap's own padding (2px top + 10px bottom) and trayListInner's own
+// padding (10px bottom) on top of that, then a few px of slack against
+// sub-pixel rounding so exactly 27 items never spuriously trips
+// has-overflow a hair early.
+const TRAY_LIST_MAX_HEIGHT = TRAY_LIST_MAX_ROWS * HEX_H + HEX_H / 2 + 12 + 10 + 4
+
 // FIXED column count, growth now goes DOWN not RIGHT (2026-08-05, real
 // bug found live via screenshot) - per Ian: "wrong spot to add... if we
 // build out to ~4ish staggered hexagons wide, the size of the hexagons
@@ -2101,9 +2137,10 @@ const HEX_H = 82
 // each new column - straight past `trayBoxStyles`'s own fixed 272px open
 // width, with the 4th column's hexes (`tutor`, `log-rollup`) visibly
 // clipped by the panel's real edge in Ian's screenshot. The tray's
-// vertical scroll (`trayListInner`'s `max-height: 420px;
-// overflow-y: auto`, which the whole hex grid already renders inside of)
-// was sitting right there unused the entire time - the grid was growing
+// vertical scroll (`trayListInner`'s max-height cap, which the whole hex
+// grid already renders inside of and only switches on overflow-y once
+// content genuinely overflows it) was sitting right there unused the
+// entire time - the grid was growing
 // in the one axis that ISN'T scrollable instead of the one that is.
 //
 // Fix: `SKILL_HEX_COLUMNS` is now the column COUNT (fixed at 3, matching
@@ -2373,8 +2410,8 @@ const hexSubtitle = css`
 // old inset: 0 used) but height is no longer pinned to it - a single-row
 // grid gives hexWrap almost no natural height, which used to cram the
 // overlay's text into a sliver. Height now grows with content instead,
-// and trayListInner (the actual scroll ancestor, already capped at
-// max-height: 420px) is what scrolls long reports - no separate inner
+// and trayListInner (the actual scroll ancestor, min-height: 420px while
+// a hex is open) is what scrolls long reports - no separate inner
 // scrollbar needed here.
 const hexOverlayStyles = (accentColor) => css`
   position: absolute;
@@ -2574,7 +2611,7 @@ const Tray = ({ id, accentColor, label, count, children }) => {
         <span className={trayLabel}>{label}</span>
       </div>
       <div className={`tray-list ${trayListGrid}`}>
-        <div className={`tray-list-inner ${trayListInner}`}>{children}</div>
+        <div className={`tray-list-inner ${trayListInner()}`}>{children}</div>
       </div>
     </div>
   )
