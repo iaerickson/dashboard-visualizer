@@ -1577,7 +1577,21 @@ const trayBoxStyles = (accentColor) => css`
      tray) - no separate "last active order" state to track, matching
      Ian's own call that the order should NOT persist across a
      mini-mode reset. */
+  /* z-index: 30 (2026-08-10, real bug fix) - per Ian: "clicking one
+     still shows two tabs as topmost... there should only ever be one
+     tab that has topmost spot." order: -1 above only moves the OPEN
+     tray to the front VISUALLY (flex order); z-index still came from
+     nth-child alone, based on original DOM position, completely
+     unrelated to order. Opening Reports Tray (nth-child(3), z-index 11)
+     while Skill Tray (nth-child(1), z-index 13) sits untouched left
+     Skill Tray's higher default z-index still painting over the newly-
+     opened Reports Tray at their overlap seam - the open tray was never
+     guaranteed to actually BE the topmost one. 30 sits above every
+     nth-child default (max 13) and above the hover bump (20), so opening
+     a tray always wins regardless of which position it started in or
+     whether some other tray is currently hovered. */
   &.is-open {
+    z-index: 30;
     order: -1;
     width: 272px;
     border-radius: 10px 0 0 10px;
@@ -1745,9 +1759,20 @@ const trayCountStyles = (accentColor) => css`
 // the second child in `trayBoxStyles`'s flex column, sharing the box's
 // background/border/width automatically since it's part of the same
 // element now.
+// align-items: start (2026-08-10, real bug fix) - per Ian: "it has the
+// scroll bar and scrolls to dead space with a small number of reports."
+// CSS Grid items default to align-items: stretch, so trayListInner (the
+// sole item in this grid's row) was being force-stretched to fill
+// whatever height the 1fr row resolved to, independent of how much
+// content it actually held - with the row's own cap raised to fit 9
+// rows, a 3-hex list stretched to fill that whole taller box, and its
+// own overflow-y: auto then genuinely had real (but empty) space to
+// scroll into. Pinning items to the start of the row means trayListInner
+// is never taller than its own content demands, up to its max-height cap.
 const trayListGrid = css`
   display: grid;
   grid-template-rows: 0fr;
+  align-items: start;
   opacity: 0;
   pointer-events: none;
   transition: grid-template-rows 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
