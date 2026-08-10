@@ -1960,8 +1960,37 @@ const HEX_FILL_TEXT = "#0a0908"
 // `i % SKILL_HEX_COLUMNS` scheme scattered a source's own multi-instance
 // backlog across different columns, breaking the "oldest unread stacks
 // at the top of its own column" behavior Reports Tray needs.
-const chunkIntoColumns = (items, groupKey) => {
+// serpentine (2026-08-10) - third optional fill mode, added for Reports
+// Tray v2 per Ian: "i dont think we need columns organized by their log
+// they can just be arranged in serpentine fashion in this general
+// chronological order... the row of read reports going from left to
+// right and then down in reverse." Replaces Reports Tray's own use of
+// `groupKey` (still here, still used by nothing today, but not deleted -
+// the per-source grouping it did is a real, working capability that may
+// be wanted again) - `groupKey` topped out at exactly SKILL_HEX_COLUMNS
+// (3) distinct groups before two sources would start sharing a column,
+// which the final review on the read/unread branch flagged as a real
+// blocker for Plan B's full 7-source vision. `serpentine` has no such
+// ceiling: it's pure row-major boustrophedon fill over `items`' own
+// order (the caller is responsible for chronological sorting - see
+// reportsItems) - row 0 fills columns left-to-right, row 1 fills
+// right-to-left, row 2 left-to-right again, and so on, growing downward
+// with no limit on how many rows accumulate. Reading top-to-bottom
+// through all three columns together traces one continuous chronological
+// zig-zag, which is the actual ask - not "each column is its own zig-zag"
+// (that would be a different, more confusing pattern for a reader's eye
+// to follow across three separate columns at once).
+const chunkIntoColumns = (items, groupKey, serpentine) => {
   const columns = Array.from({ length: SKILL_HEX_COLUMNS }, () => [])
+  if (serpentine) {
+    items.forEach((item, i) => {
+      const row = Math.floor(i / SKILL_HEX_COLUMNS)
+      const posInRow = i % SKILL_HEX_COLUMNS
+      const col = row % 2 === 0 ? posInRow : SKILL_HEX_COLUMNS - 1 - posInRow
+      columns[col].push(item)
+    })
+    return columns
+  }
   if (!groupKey) {
     items.forEach((item, i) => columns[i % SKILL_HEX_COLUMNS].push(item))
     return columns
@@ -2293,10 +2322,10 @@ const HexTile = ({ item, accentColor, filled, renderOverlayBody, onTileSelect })
   </div>
 )
 
-const HexGrid = ({ items, accentColor, fillPredicate, renderOverlayBody, onTileSelect, groupKey }) => (
+const HexGrid = ({ items, accentColor, fillPredicate, renderOverlayBody, onTileSelect, groupKey, serpentine }) => (
   <div className={hexWrap}>
     <div className={hexGrid}>
-      {chunkIntoColumns(items, groupKey).map((column, i) => (
+      {chunkIntoColumns(items, groupKey, serpentine).map((column, i) => (
         <div className={hexColumn} key={i}>
           {column.map((item) => (
             <HexTile
@@ -2577,14 +2606,25 @@ const REPORT_SOURCE_LABELS = {
 const formatHexDate = (id) => (id && id.length >= 10 ? id.slice(5) : id)
 
 // reportsItems (2026-08-08, rebuilt for Reports Tray v2's uniform payload;
-// `subtitle` added 2026-08-10) - flattens every source's `instances` list
-// into one flat hex-item array. Each item carries `reportSource` (the key
-// mark_report_viewed.py needs) and `id` (the instance's own date)
-// alongside the usual `key`/`kind`/`name`/`data` shape every other hex
-// item in this file already uses. `subtitle` is the new compact-date
-// second face line (see hexSubtitle/HexTile) - per Ian, several stacked
-// same-source hexes (e.g. five LOG hexes) were indistinguishable from the
-// outside without opening each one.
+// `subtitle` added 2026-08-10; chronological cross-source sort added same
+// day) - flattens every source's `instances` list into one flat hex-item
+// array. Each item carries `reportSource` (the key mark_report_viewed.py
+// needs) and `id` (the instance's own date) alongside the usual
+// `key`/`kind`/`name`/`data` shape every other hex item in this file
+// already uses. `subtitle` is the compact-date second face line (see
+// hexSubtitle/HexTile) - per Ian, several stacked same-source hexes (e.g.
+// five IAN LOG hexes) were indistinguishable from the outside without
+// opening each one.
+//
+// Final sort by `id` (2026-08-10) - per Ian: "i dont think we need
+// columns organized by their log they can just be arranged in serpentine
+// fashion in this general chronological order." The per-source grouping
+// this used to rely on (still available as `chunkIntoColumns`'s
+// `groupKey` mode, just no longer used here) is gone - every instance
+// from every source now sorts into one single oldest-first timeline
+// before `chunkIntoColumns(items, undefined, true)` lays it out
+// serpentine-fashion at the call site below. `id` sorts correctly as a
+// plain string since every source's id is a YYYY-MM-DD date.
 const reportsItems = (reports) => {
   const items = []
   Object.keys(REPORT_SOURCE_LABELS).forEach((source) => {
@@ -2602,6 +2642,7 @@ const reportsItems = (reports) => {
       })
     })
   })
+  items.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   return items
 }
 
@@ -3612,7 +3653,7 @@ export const render = (state) => {
             fillPredicate={(item) => !item.viewed}
             renderOverlayBody={renderReportOverlayBody}
             onTileSelect={markReportViewed}
-            groupKey={(item) => item.reportSource}
+            serpentine
           />
         </Tray>
       </div>
