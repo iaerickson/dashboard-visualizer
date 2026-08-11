@@ -1,1 +1,11 @@
-{}
+{
+  "ianlogger": {
+    "last_viewed_id": "2026-08-10"
+  },
+  "usage_scheduler": {
+    "last_viewed_id": "2026-08-11"
+  },
+  "dependency_audit": {
+    "last_viewed_id": "2026-08-04"
+  }
+}

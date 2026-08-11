@@ -1,20 +1,26 @@
 {
-  "date": "2026-08-05",
-  "time_budget_minutes": 30,
+  "date": "2026-08-11",
+  "time_budget_minutes": 40,
   "goals": [
     {
-      "title": "Decide `tutor`'s session-saving question",
-      "detail": "Ephemeral in-chat only vs. a dated-file log like ianlogger's.",
+      "title": "Decide how `.git/index.lock` should be handled going forward",
+      "detail": "Standing habit (clear it on a regular cadence regardless of that night's report) vs. treating each recurrence as a fresh surprise.",
       "current_section": "Needs Attention",
-      "context": "report-viewer's Recent Nuggets panel is already wired to surface tutor's recent entries the moment there's a log.md to read - right now nothing gets saved, so nothing shows up. Real dependency: this one decision unblocks that panel."
+      "context": "Recurred again overnight (2026-08-11) - 8 of the last 9 nightly overnight-auto-execute runs have hit this same sandbox restriction and had to wait on a manual clear from a real terminal/Claude Code session. Quick decision, but it's now blocking real commits repeatedly."
     },
     {
-      "title": "Decide whether `Template Creator`/`Script Creator`/`Reusable Task Tools` are one idea or three",
-      "detail": "All three are still bare Idea-stage entries touching the same ground.",
+      "title": "Pick a direction for `Systems Creator` and `Scribbler`",
+      "detail": "Both are still bare one-liners flagged as genuinely ambiguous - Systems Creator could mean org-systems/frameworks or literal software-architecture help; Scribbler could be notes, creative writing, or overlap with ianlogger/cultureman.",
       "current_section": "Idea",
-      "context": "productize (fleshed out separately) touches similar territory from a different angle - worth settling how many distinct projects this actually is before any of the three get built out further."
+      "context": "Neither is a good one to guess at - both have sat as undeveloped one-liners since the original 2026-07-30 brain-dump. A quick call on direction (even \"discard\" or \"merge into X\") unblocks them from just sitting there."
+    },
+    {
+      "title": "Decide `system-healthcheck`'s report format and where it surfaces",
+      "detail": "Likely feeds dashboard-visualizer and/or the daily-pull digest rather than being its own standalone output - just needs a real pick.",
+      "current_section": "Active",
+      "context": "Last open, undecided item on system-healthcheck's Sub-projects checklist; the sweep itself is built and running clean nightly, this is purely a presentation decision."
     }
   ],
-  "target_count": 2,
-  "baseline": {"needs_ian_count": 22, "idea_total": 23, "done_recent": 4}
+  "target_count": 3,
+  "baseline": {"needs_ian_count": 16, "idea_total": 19, "done_recent": 4}
 }
