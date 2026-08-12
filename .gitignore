@@ -3,3 +3,22 @@
 __pycache__/
 .claude/settings.local.json
 .worktrees/
+
+# Live runtime state, not real config (2026-08-11, real bug fix) - per
+# Ian: "when we redo or make changes to the reports tray it autopopulates
+# with reports we've already seen." These get rewritten continuously by
+# the running system (mark_report_viewed.py, the scheduler, etc.), never
+# meaningfully "committed" - every prior commit of them was just whatever
+# seed value happened to be in the working tree at commit time. Tracking
+# them meant every branch checkout/merge silently overwrote the real,
+# live value with a stale committed one - traced live to reports_viewed.json
+# specifically resetting to its empty {} seed mid-merge, making every
+# already-read report look unread again. Untracking (not deleting) so the
+# working tree's real, current value is never again at the mercy of git
+# operations. project_catalog.json/usage_resets.json aren't listed here -
+# those are genuinely-versioned config, unmodified all session.
+config/daily_goal.json
+config/last_break.json
+config/reports_viewed.json
+config/scheduled_tasks_snapshot.json
+config/session_reset.json
