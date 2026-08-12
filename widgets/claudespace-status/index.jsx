@@ -2252,18 +2252,19 @@ const SKILLS_TRAY_HEX_ROW_MAX_WIDTH = 242
 const HEX_W = 94
 const HEX_H = 82
 
-// TRAY_LIST_MAX_ROWS (2026-08-10) - per Ian: "if reports is 3 or less,
-// no scroll bar and fixed box until a report is clicked. Otherwise
-// expand box height appropriate amount for every new row of 3 until
-// rows are >9 then use a scroll bar." trayListInner (way above) already
-// gives "grow with content, then scroll past a cap" for free - it has no
-// min-height of its own in the collapsed state, so it already sizes to
-// exactly however many rows exist, up to whatever max-height allows. The
-// only piece actually missing was picking a cap sized for 9 rows instead
-// of an arbitrary reading-sized one - everything else (fixed/no-scrollbar
-// at 3 or fewer, growing row by row in between) was already this
-// design's natural behavior once that cap is right.
-const TRAY_LIST_MAX_ROWS = 9
+// TRAY_LIST_MAX_ROWS (2026-08-10, lowered 2026-08-11) - per Ian's
+// original ask: "if reports is 3 or less, no scroll bar and fixed box
+// until a report is clicked. Otherwise expand box height appropriate
+// amount for every new row of 3 until rows are >9 then use a scroll
+// bar." trayListInner (way above) already gives "grow with content,
+// then scroll past a cap" for free - the only piece actually needed was
+// picking the right cap. 9 rows (27 items) turned out to be far more
+// than it looked like on paper - seeing 13 real items (5 rows) rendered
+// live, Ian's own call was "if there are this many logs it should have
+// a scroll bar," meaning 5 rows was already too tall. Lowered to 4 (12
+// items) based on that direct feedback against the real render, not
+// picked in the abstract like the original 9 was.
+const TRAY_LIST_MAX_ROWS = 4
 
 // TRAY_LIST_MAX_HEIGHT (2026-08-10) - the pixel height of exactly
 // TRAY_LIST_MAX_ROWS rows, so has-overflow (trayListInner) stays false
