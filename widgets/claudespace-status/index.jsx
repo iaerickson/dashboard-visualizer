@@ -1271,6 +1271,21 @@ const groupNestedIndent = css`
 //     back over the card.
 let activeTrayId = null
 
+// activeHexKey (2026-08-11, real bug fix) - per Ian's screenshot: Reports
+// Tray blanked out entirely after clicking a hex. Unlike activeTrayId
+// above, which hexes' own is-active class had NOTHING tracking it
+// persistently - a fresh render() landing right as/after the click (a
+// new report genuinely arriving changes the items array, which this
+// tray polls for) replaces the hex-cell DOM nodes with the JSX's own
+// static output, which never carries the imperatively-added is-active
+// class - the click had opened a hex that the very next render silently
+// forgot. Tracks which hex is open by its own stable key (the same
+// value HexGrid already uses for React-style keys, now also stamped as
+// data-hex-key on each cell) so render()'s own hook (below) can
+// re-apply is-active by key after every render, the same way
+// syncTrayStackOrder already re-applies is-open by trayId.
+let activeHexKey = null
+
 const toggleTray = (trayId, e) => {
   e.stopPropagation()
   const wrapEl = e.currentTarget.closest(".tray-wrap")
@@ -1346,6 +1361,7 @@ const toggleHexSelection = (e) => {
   if (!wrapEl) return false
   const wasActive = cell.classList.contains("is-active")
   wrapEl.querySelectorAll(".hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
+  activeHexKey = wasActive ? null : cell.dataset.hexKey
   if (!wasActive) {
     cell.classList.add("is-active")
     // 2026-08-08 fix (final review, Finding 2), corrected 2026-08-10 -
@@ -1375,7 +1391,23 @@ const toggleHexSelection = (e) => {
 const resetHexSelection = (wrapEl) => {
   if (!wrapEl) return
   wrapEl.querySelectorAll(".hex-cell.is-active").forEach((el) => el.classList.remove("is-active"))
+  activeHexKey = null
   syncTrayListHeight()
+}
+
+// syncActiveHex (2026-08-11) - see activeHexKey's own comment. Re-applies
+// is-active to whichever hex-cell matches the tracked key, if any -
+// called from render()'s own hook (below), same timing as
+// syncTrayStackOrder, so a hex re-opened by a fresh render's own DOM
+// output picks its is-active class back up immediately instead of
+// silently staying closed. A no-op whenever activeHexKey is null, or
+// when the matching item genuinely no longer exists in this render (the
+// report itself got marked read and dropped from the list elsewhere,
+// for instance) - nothing to re-open in that case.
+const syncActiveHex = () => {
+  if (!activeHexKey) return
+  const cell = document.querySelector(`.hex-cell[data-hex-key="${CSS.escape(activeHexKey)}"]`)
+  if (cell && !cell.classList.contains("is-active")) cell.classList.add("is-active")
 }
 
 // syncTrayListHeight (2026-08-10, real bug fix, round 3) - per Ian: "it
@@ -2682,6 +2714,7 @@ const renderScriptOverlayBody = (script, accentColor) => (
 const HexTile = ({ item, accentColor, filled, renderOverlayBody, onTileSelect }) => (
   <div
     className={`hex-cell ${hexCell}`}
+    data-hex-key={item.key || item.path || item.name}
     onClick={(e) => {
       const isNowOpen = toggleHexSelection(e)
       if (isNowOpen && onTileSelect) onTileSelect(item)
@@ -3780,7 +3813,18 @@ export const render = (state) => {
   // function returns and Übersicht's own synchronous DOM patch from this
   // render has already applied - queuing the sync here closes that gap on
   // every refresh, not just every 3 seconds.
+  //
+  // syncActiveHex runs FIRST (2026-08-11) - per Ian's screenshot: Reports
+  // Tray blanked out entirely after a click. A fresh render's own DOM
+  // output never carries the imperatively-added is-active class (see
+  // activeHexKey's own comment) - re-applying it before
+  // syncTrayListHeight runs matters, not just after: syncTrayListHeight
+  // decides browsing vs reading height by checking for
+  // .hex-cell.is-active .hex-overlay, so if is-active hadn't been
+  // restored yet, it would measure the (wrong) browsing case even though
+  // a hex should still be open.
   setTimeout(() => {
+    syncActiveHex()
     syncTrayListHeight()
     syncTrayStackOrder()
   }, 0)
