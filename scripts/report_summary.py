@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """
-report_summary.py — Reads ianlogger's latest daily log entry and
-usage-scheduler's latest report, and emits a JSON summary for the
-report-viewer widget to render.
+report_summary.py — Reads usage-scheduler's latest report and emits a
+JSON summary for the report-viewer widget to render.
 
 Built 2026-08-04, per Ian: "I want to work on and run the viewer for our
 logs and usage summary reports so I can be presented with those and have
 those be more visible without having to hunt those down." Same read-only
 posture as status_summary.py (see that file's own docstring) - this reads
-ianlogger/logs/ and usage-scheduler/latest-report.md, never writes to
-either. Meant to be called by report-viewer's own Übersicht `command`:
+usage-scheduler/latest-report.md, never writes to it. Meant to be called by report-viewer's own Übersicht `command`:
 
     python3 /Users/ianerickson/Desktop/Projects/dashboard-visualizer/scripts/report_summary.py
 
@@ -17,7 +15,6 @@ Output shape:
 
 {
   "generated_at": "...",
-  "log": {"date": "2026-08-04", "text": "...", "hours_ago": 3.2} | null,
   "report": {
     "title": "🌙 Morning Report — for 2026-08-04",
     "sections": {"Completed tonight": ["...", "..."], "Still needs you": [...], ...},
@@ -108,47 +105,11 @@ def list_dated_files(root: Path) -> list:
 def find_latest_dated_file(root: Path) -> Path | None:
     """The single most recent dated file - see list_dated_files above for
     the real logic. Kept as its own function since "just the latest" is
-    still exactly what load_latest_log/load_latest_usage_report want for
+    still exactly what load_latest_usage_report wants for
     their own "what's current right now" job, unrelated to Reports Tray
     v2's separate "what's unread" job."""
     files = list_dated_files(root)
     return files[-1] if files else None
-
-
-def load_log_entry(path: Path) -> dict:
-    """Parses ONE ianlogger dated entry file, given its path directly (not
-    a directory to search) - extracted (2026-08-08) from load_latest_log
-    so Reports Tray v2's archive-instance enumeration can load any past
-    entry, not just the latest. Strip the leading "# YYYY-MM-DD" heading,
-    hand back the body text as-is - ianlogger writes narrative prose, no
-    internal structure to parse."""
-    text = path.read_text(errors="ignore").strip()
-    body_lines = [line for line in text.splitlines() if not H1_RE.match(line.strip())]
-    body = "\n\n".join(part.strip() for part in "\n".join(body_lines).split("\n\n") if part.strip())
-    date = path.stem
-    hours_ago = None
-    try:
-        entry_date = datetime.strptime(date, "%Y-%m-%d")
-        hours_ago = (datetime.now() - entry_date).total_seconds() / 3600
-    except ValueError:
-        pass
-    return {
-        "date": date,
-        "text": body,
-        "hours_ago": round(hours_ago, 1) if hours_ago is not None else None,
-    }
-
-
-def load_latest_log(claude_space: Path) -> dict | None:
-    """ianlogger's single most recent entry - see load_log_entry above for
-    the real parsing. Unchanged behavior/signature from before 2026-08-08;
-    now just a thin wrapper so existing callers (status_summary.py's
-    "current log" display) don't need to change."""
-    logs_dir = claude_space / "ianlogger" / "logs"
-    if not logs_dir.exists():
-        return None
-    latest = find_latest_dated_file(logs_dir)
-    return load_log_entry(latest) if latest is not None else None
 
 
 def parse_report_sections(text: str) -> dict:
@@ -212,7 +173,7 @@ def load_latest_usage_report(claude_space: Path) -> dict | None:
 
 # NUGGET_PERSONAS (2026-08-04), per Ian: report-viewer should "know to pull
 # context or info from nuggets" the "___man"-family skills have collected in
-# the past, not just ianlogger/usage-scheduler. Checked each one's own
+# the past, not just usage-scheduler. Checked each one's own
 # README directly before building anything here (2026-08-04) - real,
 # current state: NONE of these four persist any content to a file yet.
 # historyman/cultureman/learnerman's shared storage format is still an
@@ -253,26 +214,6 @@ def load_persona_nuggets(claude_space: Path) -> list:
     return results
 
 
-def load_dependency_audit_entry(path: Path) -> dict:
-    """Parses ONE dependency-audit report file for Reports Tray v2
-    (2026-08-08) - just the title and the file's own path, no excerpt
-    parsing. dependency-audit's reports are long prose/table documents
-    with no "- " bullet convention parse_report_sections could reuse (its
-    "## The short version" section is paragraphs, not bullets) - rather
-    than build a second, different prose-excerpt parser for one source,
-    v1 keeps this deliberately minimal: enough to identify which report
-    this is and when, not a preview of its findings. Revisit if a real
-    excerpt turns out to matter in practice."""
-    text = path.read_text(errors="ignore")
-    title = None
-    for line in text.splitlines():
-        h1 = H1_RE.match(line.strip())
-        if h1:
-            title = h1.group(1).strip()
-            break
-    return {"title": title or "Dependency Audit", "path": str(path)}
-
-
 def list_archive_instances(archive_dir: Path, viewed_entry: dict, load_content) -> list:
     """Generic dated-archive instance enumeration for Reports Tray v2
     (2026-08-08). Returns every unread instance (oldest first, so the
@@ -286,8 +227,7 @@ def list_archive_instances(archive_dir: Path, viewed_entry: dict, load_content) 
     an older backlog instance marks it read and it drops out of the very
     next poll's result, closing its own just-opened overlay out from under
     you). `load_content(path) -> dict` is the per-source content loader
-    (load_log_entry, load_usage_report_entry, load_dependency_audit_entry,
-    ...); its returned dict is merged with `id`/`viewed` on each instance.
+    (load_usage_report_entry, ...); its returned dict is merged with `id`/`viewed` on each instance.
     Read state is a single watermark, not a per-instance flag - see
     is_unread's own docstring."""
     files = list_dated_files(archive_dir)
@@ -308,7 +248,6 @@ def list_archive_instances(archive_dir: Path, viewed_entry: dict, load_content) 
 def build_summary(claude_space: Path) -> dict:
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "log": load_latest_log(claude_space),
         "report": load_latest_usage_report(claude_space),
         "nuggets": load_persona_nuggets(claude_space),
     }

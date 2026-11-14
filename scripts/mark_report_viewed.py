@@ -8,7 +8,7 @@ for copy-to-clipboard - this isn't a new interaction pattern for this
 codebase, just a new use of one that already works).
 
 Two modes, matching the two watermark shapes reports_viewed.json holds:
-  --id <date>   for archive sources (ianlogger, usage-scheduler, dependency-audit)
+  --id <date>   for archive sources (usage-scheduler)
   --mtime       for running-log sources (skill-auditor, automation-scout) -
                 stamps the CURRENT wall-clock time as the new watermark,
                 since running-log sources are tracked by "has the file
@@ -31,7 +31,7 @@ from report_summary import load_reports_viewed, save_reports_viewed
 def main() -> int:
     parser = argparse.ArgumentParser(description="Mark a Reports Tray source as viewed.")
     parser.add_argument("--config", required=True, type=Path, help="Path to config/reports_viewed.json")
-    parser.add_argument("--source", required=True, help="Source key, e.g. ianlogger, usage_scheduler")
+    parser.add_argument("--source", required=True, help="Source key, e.g. usage_scheduler")
     parser.add_argument("--id", help="Archive-source instance id (date), e.g. 2026-08-06")
     parser.add_argument("--mtime", action="store_true", help="Running-log source - stamp current time")
     args = parser.parse_args()

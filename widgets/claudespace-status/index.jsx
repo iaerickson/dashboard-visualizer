@@ -2424,7 +2424,7 @@ const hexWrap = css`
      left the ACTIVE hex's own face (.hex-face) alone, relying entirely
      on its own overlay to visually cover it. That only works if the
      overlay's content is at least as tall as the hex's own box - a
-     short report (a brief log entry some days, per ianlogger's own
+     short report (a brief report some days, per the morning report's own
      "nothing interesting happened" case) produces a short overlay, and
      for a hex in the offset honeycomb column that starts partway down
      hexWrap, the overlay (anchored to hexWrap's own top edge) can end
@@ -2581,7 +2581,7 @@ const hexLabel = css`
 
 // hexSubtitle (2026-08-10) - optional small second line under a hex's main
 // label, per Ian's screenshot feedback on Reports Tray: with several
-// stacked instances of the same source (e.g. five IANLOGGER hexes), the
+// stacked instances of the same source (e.g. five morning-report hexes), the
 // face alone couldn't tell them apart without opening each one. Generic
 // on HexTile (below), not Reports-specific - Skill Tray/Script Tray items
 // never set `item.subtitle`, so nothing renders there and nothing about
@@ -2998,7 +2998,7 @@ const REPORTS_BULLET_CAP = 3
 
 // REPORT_SOURCE_LABELS (2026-08-08, shortened 2026-08-10, corrected same
 // day) - short, fixed hex-face labels. The real bug in the original
-// "IANLOGGER"/"DEPENDENCY AUDIT" labels was never their length - it was
+// "MORNING REPORT"/"DEPENDENCY AUDIT" labels was never their length - it was
 // that a single unbroken word with nowhere to wrap gets fragmented
 // mid-word inside hexLabel's 50px box ("IANLOGG"/"ER"). "MORNING REPORT"
 // never had this problem: it already wraps cleanly at the space between
@@ -3011,9 +3011,7 @@ const REPORTS_BULLET_CAP = 3
 // (renderReportOverlayBody below), same as every other hex in this tray
 // system already does.
 const REPORT_SOURCE_LABELS = {
-  ianlogger: "IAN LOG",
   usage_scheduler: "MORNING REPORT",
-  dependency_audit: "DEPS AUDIT",
 }
 
 // formatHexDate (2026-08-10) - compact MM-DD form of an archive
@@ -3034,7 +3032,7 @@ const formatHexDate = (id) => (id && id.length >= 10 ? id.slice(5) : id)
 // `key`/`kind`/`name`/`data` shape every other hex item in this file
 // already uses. `subtitle` is the compact-date second face line (see
 // hexSubtitle/HexTile) - per Ian, several stacked same-source hexes (e.g.
-// five IAN LOG hexes) were indistinguishable from the outside without
+// five morning-report hexes) were indistinguishable from the outside without
 // opening each one.
 //
 // Final sort by `id` (2026-08-10) - per Ian: "i dont think we need
@@ -3069,18 +3067,6 @@ const reportsItems = (reports) => {
 
 const renderReportOverlayBody = (item, accentColor) => {
   const instance = item.data
-
-  if (item.kind === "ianlogger") {
-    return (
-      <div>
-        <div className={skillRowName} style={{ fontSize: 13 }}>{item.name}</div>
-        <div className={skillOverlaySection}>
-          <div className={overlayLabelStyles(accentColor)}>{instance.date} · {formatReportHoursAgo(instance.hours_ago)}</div>
-          <div className={skillOverlayBody}>{instance.text}</div>
-        </div>
-      </div>
-    )
-  }
 
   if (item.kind === "usage_scheduler") {
     const completed = findSection(instance.sections, [/completed/i])
@@ -3122,16 +3108,6 @@ const renderReportOverlayBody = (item, accentColor) => {
     )
   }
 
-  // dependency_audit
-  return (
-    <div>
-      <div className={skillRowName} style={{ fontSize: 13 }}>{item.name}</div>
-      <div className={skillOverlaySection}>
-        <div className={overlayLabelStyles(accentColor)}>{instance.title}</div>
-        <div className={skillOverlayBody}>{item.id}</div>
-      </div>
-    </div>
-  )
 }
 
 // markReportViewed (2026-08-08, Reports Tray v2) - HexGrid's onTileSelect

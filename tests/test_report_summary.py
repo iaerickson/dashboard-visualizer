@@ -25,8 +25,6 @@ from report_summary import (  # noqa: E402
     is_unread,
     list_archive_instances,
     list_dated_files,
-    load_dependency_audit_entry,
-    load_log_entry,
     load_reports_viewed,
     load_usage_report_entry,
     save_reports_viewed,
@@ -54,7 +52,7 @@ class ReportsViewedRoundTripTests(unittest.TestCase):
     def test_save_then_load_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "reports_viewed.json"
-            data = {"ianlogger": {"last_viewed_mtime": 123.456}}
+            data = {"usage_scheduler": {"last_viewed_mtime": 123.456}}
             save_reports_viewed(config_path, data)
             self.assertEqual(load_reports_viewed(config_path), data)
 
@@ -224,27 +222,6 @@ class ListArchiveInstancesTests(unittest.TestCase):
             self.assertEqual(instances[0]["path"], str(root / "2026-08-04.md"))
 
 
-class LoadLogEntryTests(unittest.TestCase):
-    def test_parses_date_and_strips_heading(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "2026-08-04.md"
-            path.write_text("# 2026-08-04\n\nDid some real work today.\n\nSecond paragraph.\n")
-            entry = load_log_entry(path)
-            self.assertEqual(entry["date"], "2026-08-04")
-            self.assertIn("Did some real work today.", entry["text"])
-            self.assertIn("Second paragraph.", entry["text"])
-            self.assertNotIn("# 2026-08-04", entry["text"])
-            self.assertIsInstance(entry["hours_ago"], float)
-
-    def test_non_dated_filename_yields_none_hours_ago(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "not-a-date.md"
-            path.write_text("# not-a-date\n\nbody\n")
-            entry = load_log_entry(path)
-            self.assertIsNone(entry["hours_ago"])
-            self.assertEqual(entry["date"], "not-a-date")
-
-
 class LoadUsageReportEntryTests(unittest.TestCase):
     def test_parses_title_and_sections(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -275,22 +252,6 @@ class LoadUsageReportEntryTests(unittest.TestCase):
             entry = load_usage_report_entry(path)
             self.assertIsNone(entry["title"])
 
-
-class LoadDependencyAuditEntryTests(unittest.TestCase):
-    def test_parses_title(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "2026-08-04.md"
-            path.write_text("# Dependency Audit — 2026-08-04\n\n## The short version\n\nSome prose.\n")
-            entry = load_dependency_audit_entry(path)
-            self.assertEqual(entry["title"], "Dependency Audit — 2026-08-04")
-            self.assertEqual(entry["path"], str(path))
-
-    def test_missing_title_falls_back_to_default(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "2026-08-04.md"
-            path.write_text("no heading here, just prose.\n")
-            entry = load_dependency_audit_entry(path)
-            self.assertEqual(entry["title"], "Dependency Audit")
 
 
 if __name__ == "__main__":
