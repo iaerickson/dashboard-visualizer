@@ -19,7 +19,7 @@ This also generalizes the Skill Tray's current tray-specific state and markup in
 - Theme colors live in `widgets/src/themes/nerv.js`; `STATUS_BLUE` (`#7fb8d9`) already exists there, currently used only for the "Paused" project-status icon and the away/sleep icon — no conflicting semantic meaning, safe to reuse as the Script Tray's accent.
 - There is **no existing catalog or metadata convention for scripts** (unlike skills' `SKILL.md` frontmatter) — no usage log, no call counts. Real generated scripts today are plain files: `dependency-audit/scripts/housekeeping.sh`, `system-healthcheck/scripts/consistency_sweep.py`, `log-rollup/scripts/rollup.py` (ClaudeSpace repo), plus this repo's own `scripts/status_summary.py`, `scripts/lifecycle_resort.py`, `scripts/report_summary.py`, `scripts/verify_widget.sh`.
 
-## Scope decisions (confirmed with Ian)
+## Scope decisions (confirmed with the owner)
 
 1. **Script source scope:** scan both the ClaudeSpace tracker's `*/scripts/*.{py,sh}` AND this repo's (dashboard-visualizer) own `scripts/*.{py,sh}` — not ClaudeSpace-only.
 2. **Content presentation:** same hex-grid visualization as the Skill Tray (not a plain list), re-themed blue. Since scripts have no usage-count data, every script hex renders in the **filled** state (existence is the only true signal available — no fabricated "used/unused" distinction).

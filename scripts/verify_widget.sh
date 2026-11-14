@@ -162,7 +162,7 @@ EOF
 done
 
 # --- 1.7. Skill Tray hex grid never computes wider than its own real
-# boundary (2026-08-05, real bug found live via screenshot) - per Ian: "if
+# boundary (2026-08-05, real bug found live via screenshot) - per the owner: "if
 # something ever gets added and style or spacing makes it ever move past
 # like a hard boundary where some of it gets cut off can we make a check
 # for styling to make sure that never happens or is avoided?" The 4th hex

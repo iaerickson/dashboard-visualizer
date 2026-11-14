@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 mark_report_viewed.py — Reports Tray v2 (2026-08-08). Updates one source's
-entry in config/reports_viewed.json when Ian clicks open a hex in the
+entry in config/reports_viewed.json when the owner clicks open a hex in the
 Reports Tray. Called by the widget itself via Übersicht's `run()` shell-out
 (same mechanism claudespace-status/index.jsx's own copyPrompt already uses
 for copy-to-clipboard - this isn't a new interaction pattern for this

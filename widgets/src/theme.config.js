@@ -1,6 +1,6 @@
 // theme.config.js — THE ONE FILE TO EDIT to swap the widget's visual style.
 //
-// Per Ian (2026-07-31): rather than one file holding every theme's data in
+// Per the owner (2026-07-31): rather than one file holding every theme's data in
 // a big registry object, each visual style is its own self-contained file
 // in ./themes/, and swapping is just changing which one this file points
 // at - a "config file that gets generated per style, swapping is pointing
@@ -8,7 +8,7 @@
 //
 // Lives in src/ (2026-07-31): Übersicht's own README says any file inside a
 // directory literally named node_modules, lib, or src is treated as a module,
-// not a separate widget - Ian noticed this file and themes/nerv.js were
+// not a separate widget - the owner noticed this file and themes/nerv.js were
 // showing up as their own entries in Übersicht's widget list alongside
 // claudespace-status itself. Moving both under src/ makes Übersicht ignore
 // them as widgets while still letting index.jsx import them normally.

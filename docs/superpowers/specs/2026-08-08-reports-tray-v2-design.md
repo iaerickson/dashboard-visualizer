@@ -21,10 +21,10 @@ Confirmed BUILT, but as one running file with dated entries appended *inside* it
 Confirmed NOT BUILT yet, stdout-only:
 - `system-healthcheck`'s `consistency_sweep.py` — this spec adds a dated-file write step, making it an **archive source** like dependency-audit.
 
-Confirmed fundamentally different shape, included per Ian's direct call:
+Confirmed fundamentally different shape, included per the owner's direct call:
 - `tip-of-day` (dashboard-visualizer widget) — no file at all today, deterministic day-of-year rotation. Gets exactly one "instance" per day (today's tip), never a backlog.
 
-Explicitly deferred (per Ian, "for now I want to see it in reports, we can tweak later"): `dependency-audit`/`skill-auditor`/`automation-scout` already have their own hexes in the Skill Tray (call counts). Their *output* now also appears in Reports Tray. Acknowledged as possibly redundant; not resolved here.
+Explicitly deferred (per the owner, "for now I want to see it in reports, we can tweak later"): `dependency-audit`/`skill-auditor`/`automation-scout` already have their own hexes in the Skill Tray (call counts). Their *output* now also appears in Reports Tray. Acknowledged as possibly redundant; not resolved here.
 
 ## Design
 
@@ -66,7 +66,7 @@ Python (`status_summary.py`/`report_summary.py`) returns:
 }
 ```
 
-Every instance dict carries at minimum `{"id": str, "viewed": bool, ...source-specific content fields}`. For archive sources, `id` is the instance's own date; `instances` includes every unread dated file (oldest first, so the JSX side's natural top-to-bottom column order puts oldest-unread at the top per Ian's own ordering ask) **plus** the single newest instance even if already viewed (so the source's hex never fully disappears — there's always at least one hex per source once it has ever produced anything). For running-log and tip-of-day sources, `instances` is always length 0 or 1 (no backlog concept).
+Every instance dict carries at minimum `{"id": str, "viewed": bool, ...source-specific content fields}`. For archive sources, `id` is the instance's own date; `instances` includes every unread dated file (oldest first, so the JSX side's natural top-to-bottom column order puts oldest-unread at the top per the owner's own ordering ask) **plus** the single newest instance even if already viewed (so the source's hex never fully disappears — there's always at least one hex per source once it has ever produced anything). For running-log and tip-of-day sources, `instances` is always length 0 or 1 (no backlog concept).
 
 ### 3. JSX: uniform hex-per-instance, `fillPredicate` now means "unread"
 
@@ -91,6 +91,6 @@ Same constraints as every prior tray branch: no JS test runner, no live-GUI acce
 ## Out of scope
 
 - Parsing individual dated entries out of `skill-auditor`/`automation-scout`'s running log files to give them real backlog support — v1 ships them as single always-current hexes (mtime-based read/unread only). A follow-up if the single-hex treatment turns out to feel wrong in practice.
-- Resolving the Skill-Tray/Reports-Tray content overlap for dependency-audit/skill-auditor/automation-scout — shipping both, per Ian's explicit "tweak later."
+- Resolving the Skill-Tray/Reports-Tray content overlap for dependency-audit/skill-auditor/automation-scout — shipping both, per the owner's explicit "tweak later."
 - Any UI for manually marking something unread again, or a "mark all read" action — not asked for.
 - A cap on unread backlog size — explicitly decided against (no cap).

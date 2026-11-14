@@ -14,7 +14,7 @@ by automated processes (the widget's own click handlers already do the
 same). Safe to run as often as the widget wants either way. Meant to be
 called directly by an Übersicht widget's `command`:
 
-    python3 /Users/ianerickson/Desktop/Projects/dashboard-visualizer/scripts/status_summary.py
+    python3 scripts/status_summary.py
 
 Output shape (abridged):
 
@@ -84,7 +84,7 @@ STATUS_EMOJI = {
     "active": "🟢",
     "idea": "🟡",
     "paused": "⏸️",
-    # Real status, added 2026-07-31 (Ian: "we still need a backlog section").
+    # Real status, added 2026-07-31 (the owner: "we still need a backlog section").
     # Structural piece only - see SECTION_META's comment in index.jsx for what
     # this does and doesn't cover yet (no automated promotion into/out of it).
     "backlog": "🔵",
@@ -92,9 +92,9 @@ STATUS_EMOJI = {
 }
 
 STALE_DAYS_THRESHOLD = 30  # proposed definition from system-healthcheck/README.md, pending sign-off
-# "Done recently" window (2026-07-31, per Ian - answered the open "Done count is
+# "Done recently" window (2026-07-31, per the owner - answered the open "Done count is
 # often just 0" question): the raw Done count is "how many projects are tagged
-# done right now," which barely moves. Ian's fix: tiny mode should show how many
+# done right now," which barely moves. The owner's fix: tiny mode should show how many
 # were marked done in the last 2 weeks instead - a real momentum signal - while
 # big mode can show both that AND the plain lifetime total. Reuses the same
 # README-mtime signal everything else already uses (marking something Done
@@ -107,7 +107,7 @@ NEEDS_ATTENTION_LIMIT = 8  # cap on NEEDS-IAN.md items surfaced in the widget - 
 NEEDS_IAN_BULLET_RE = re.compile(r"^- (🤔|🚧)", re.MULTILINE)
 # Open (not-yet-resolved) NEEDS-IAN.md entries only - excludes lines starting "✅ Resolved".
 # Pulls the bolded lead-in as a short title for the widget (full text stays in the file).
-# Group 3 (2026-07-31, per Ian: "would like you to start making these all
+# Group 3 (2026-07-31, per the owner: "would like you to start making these all
 # expandable children too" - see parse_needs_ian_items' own comment) captures
 # the REST of that same bullet's line - almost every entry in this file is one
 # long line (bold title + its own explanation on the same bullet), so "the
@@ -155,7 +155,7 @@ def parse_index_projects(index_text: str) -> list[dict]:
     meant as the sole proxy for "when was this idea created," but that broke
     in practice: categories interleave old and new entries (an old one-liner
     in a later category sorts "newer" than a fresh one added to an earlier
-    category, purely by file position), found live when Ian correctly flagged
+    category, purely by file position), found live when the owner correctly flagged
     idea sort as not actually working. `_created_date` is the more accurate
     signal where it exists - many idea one-liners already embed a real date in
     a parenthetical aside - with `_order` as the fallback only for entries
@@ -221,7 +221,7 @@ def parse_needs_ian_items(needs_ian_text: str, limit: int = NEEDS_ATTENTION_LIMI
     "🚧 **Blocked**" / "🤔 **Ask/Clarify**" as key entries, which would otherwise
     get picked up as fake items.
 
-    Sort order (2026-07-31, per Ian: sort by "the logic weight that is part of
+    Sort order (2026-07-31, per the owner: sort by "the logic weight that is part of
     general list creation preference - critical level, how hard it gets the
     more it gets put off, if other things are dependent on it"): that's
     log-pose's real weight matrix (see log-pose/SKILL.md - dependency-blockers
@@ -239,7 +239,7 @@ def parse_needs_ian_items(needs_ian_text: str, limit: int = NEEDS_ATTENTION_LIMI
     inserted at various points over time, so file position isn't a trustworthy
     age signal here the way it is for INDEX.md's Idea one-liners.
 
-    Project grouping (2026-07-31, per Ian: "inside of any subheader like active
+    Project grouping (2026-07-31, per the owner: "inside of any subheader like active
     or needs attention, every item connected or part of the same scope or
     project should get linked together into another new subheader that can
     expand"). Needs Attention is where this is buildable today without
@@ -251,13 +251,13 @@ def parse_needs_ian_items(needs_ian_text: str, limit: int = NEEDS_ATTENTION_LIMI
     list mechanism already used for the section itself, one level deeper);
     items whose project only has one open entry, or that don't start with a
     recognizable `` `project-name` `` reference at all, stay in the flat
-    `items` list exactly as before. This is a first, narrow slice of Ian's
+    `items` list exactly as before. This is a first, narrow slice of the owner's
     broader ask - his own framing covers grouping inside ANY section (Active,
     Idea, etc.), not just Needs Attention, and by "connected/same scope," not
     only literal shared project name. Both are real, not built here: today
     every other section is already one-row-per-project (no multi-item-per-
     project case exists yet to group), and "same scope" beyond a literal
-    project match would need the freeform-tagging convention Ian said to
+    project match would need the freeform-tagging convention the owner said to
     start loose and tighten later - not guessed at wholesale in this pass."""
     list_section = needs_ian_text.split("## List", 1)
     body = list_section[1] if len(list_section) > 1 else needs_ian_text
@@ -266,7 +266,7 @@ def parse_needs_ian_items(needs_ian_text: str, limit: int = NEEDS_ATTENTION_LIMI
         title = title.strip()
         # `rest` starts right after the closing ** of the title - trim the
         # leading punctuation most entries use before their own explanation
-        # ("**Title.** Ian said..." / "**Title** — Ian said...") so the
+        # ("**Title.** The owner said..." / "**Title** — the owner said...") so the
         # detail text doesn't open with a stray ". " or " — ".
         detail = re.sub(r"^[\s.:—-]+", "", rest).strip()
         # Strip markdown bold - the widget renders plain text, so a literal
@@ -315,14 +315,14 @@ def collect_stale_projects(sections: dict) -> list[dict]:
     in the sections dict. Returns full items - not just names - so the widget
     can render these as their own proper "Dormant" subsection (same ProjectRow,
     same hover detail, same click-to-open-in-Claude) rather than a flat
-    comma-joined name list (2026-07-31, per Ian: wanted stale/dormant projects
+    comma-joined name list (2026-07-31, per the owner: wanted stale/dormant projects
     listed as their own subheader alongside Active/Idea/Paused/Done, not buried
     inside Needs Attention as plain text).
 
     Still excludes "done" (finishing something isn't "abandoning" it). Paused
     IS included again (2026-07-31, revised same day - see build_sections'
     comment): a paused item that keeps sitting untouched for 30+ days after
-    being paused should surface as dormant too, per Ian's "if there is no
+    being paused should surface as dormant too, per the owner's "if there is no
     movement done on a paused item it goes back to dormant." What's NOT
     happening anymore is an *immediate* double-signal the moment something is
     paused - that only shows up now if the pause itself didn't come with a
@@ -332,7 +332,7 @@ def collect_stale_projects(sections: dict) -> list[dict]:
 
     "backlog" added 2026-07-31 alongside the new status itself - uses the
     same general 30-day threshold as everything else here for now, NOT the
-    2-week-specifically number from Ian's original lifecycle proposal
+    2-week-specifically number from the owner's original lifecycle proposal
     (Backlog → Dormant at 2 weeks, distinct from the 30-day default). Giving
     Backlog its own shorter threshold is real, still-open follow-up work
     (parse_project_readme would need a per-status threshold, not one global
@@ -352,7 +352,7 @@ BIN_ENTRY_RE = re.compile(
 
 def load_bin_items(claude_space: Path) -> list[dict]:
     """Reads _bin/BIN.md's dated entries (see that file's own "Convention"
-    section for the exact line format) - the bin/trash Ian asked for
+    section for the exact line format) - the bin/trash the owner asked for
     (2026-08-04): "a bin/trash to discard ideas we don't wanna do anymore
     and keep track of stuff that way," physically confirmed as "move to a
     bin folder" rather than a status flag. Real project folders actually
@@ -473,8 +473,8 @@ def build_sections(claude_space: Path, index_projects: list[dict], catalog: dict
             item.update(parse_project_readme(readme_path, now_ts))
 
         # Paused + dormant relationship (2026-07-31, revised same day after
-        # Ian's follow-up): NOT a blanket "paused can never be dormant" rule
-        # anymore - that was too blunt. Ian's actual point: a paused item
+        # the owner's follow-up): NOT a blanket "paused can never be dormant" rule
+        # anymore - that was too blunt. The owner's actual point: a paused item
         # shouldn't *immediately* double-signal as dormant the moment it's
         # paused, but a paused item that then sits untouched for the same 30+
         # days everything else uses SHOULD eventually flag dormant again - "if
@@ -499,13 +499,13 @@ def build_sections(claude_space: Path, index_projects: list[dict], catalog: dict
     sections = {}
     for status, items in by_status.items():
         if status == "idea":
-            # Newest-created first (2026-07-31, per Ian: ideas should sort by
+            # Newest-created first (2026-07-31, per the owner: ideas should sort by
             # creation, not by touch - most ideas are one-line INDEX.md entries
             # with no README/mtime at all, so "most recently touched" doesn't
             # even apply to them the way it does for the other statuses).
             #
             # First attempt used file position (_order) alone as a creation-
-            # date proxy, reversed. Found broken live (2026-07-31, Ian: "ideas
+            # date proxy, reversed. Found broken live (2026-07-31, the owner: "ideas
             # are not sorted by newest idea") - INDEX.md's categories interleave
             # old and new entries, so an old one-liner sitting in a later
             # category outranked a genuinely new one added to an earlier
@@ -557,7 +557,7 @@ def most_recently_touched_project(claude_space: Path) -> dict | None:
 
 def latest_scheduled_task_run_epoch(snapshot_path: Path) -> float | None:
     """Reads config/scheduled_tasks_snapshot.json - a small local cache of
-    Ian's real scheduled-task lastRunAt timestamps (2026-08-05), per Ian:
+    the owner's real scheduled-task lastRunAt timestamps (2026-08-05), per the owner:
     "is there a small file we can write to locally... on any activity after
     that 5 hr refresh, on first activity whether its me or an automated
     message, we update the initial time stamp." This is the "automated
@@ -620,7 +620,7 @@ def latest_tracker_activity_mtime(
     widget lives entirely under dashboard-visualizer's own repo (Projects/
     dashboard-visualizer - widgets/*/index.jsx, scripts/*.py, config/*.json,
     this repo's own README.md), a sibling directory this glob never touched.
-    Per Ian, live: "we were supposed to implement logic that detects initial
+    Per the owner, live: "we were supposed to implement logic that detects initial
     activity after the timer runs down to refresh, why isn't that working" -
     root cause was the signal being too narrow, not the reset-on-activity
     logic itself (that part already worked correctly once given a true
@@ -648,7 +648,7 @@ def latest_tracker_activity_mtime(
     happened to touch skills-usage-log.json.
 
     `scheduled_snapshot_path` (2026-08-05) is the other half of the same
-    round - per Ian: "is there a small file we can write to locally...
+    round - per the owner: "is there a small file we can write to locally...
     on any activity after that 5 hr refresh, on first activity whether
     its me or an automated message, we update the initial time stamp."
     See `latest_scheduled_task_run_epoch`'s own docstring for why this is
@@ -729,7 +729,7 @@ def load_usage_resets(config_path: Path, now: datetime) -> list[dict] | None:
         except (KeyError, ValueError):
             continue
         seconds_left = (target - now).total_seconds()
-        # elapsed_fraction (2026-07-31, per Ian - wanted a depleting gauge for
+        # elapsed_fraction (2026-07-31, per the owner - wanted a depleting gauge for
         # this too, not just the session countdown): a fixed weekly cadence
         # means the cycle length is always a known 7 days, so "how much of
         # this week's window is used up" is plain math off seconds_left, same
@@ -762,13 +762,13 @@ def load_session_reset(config_path: Path, now: datetime, last_activity_mtime: fl
     something computed live (the ~5hr session window is rolling/usage-dependent,
     no fixed clock - see dashboard-visualizer/README.md). Format:
     {"reported_at": "<ISO timestamp>", "hours_from_report": 1.0, "session_window_hours": 5.0}
-    Ian reports "X left, resets in Y hours" at some moment; this just counts
+    the owner reports "X left, resets in Y hours" at some moment; this just counts
     down from that anchor and honestly shows how long ago it was reported,
     since the number drifts out of truth the more time passes without a
     fresh report.
 
     hours_from_report vs. session_window_hours (2026-08-04, real bug fix):
-    these used to be the SAME number, which was wrong the moment Ian reports
+    these used to be the SAME number, which was wrong the moment the owner reports
     a REMAINING amount partway through a window rather than the window's
     full length - e.g. "3h18m left" partway through a real ~5hr window. Using
     that 3.3 as both the countdown target AND the bar's 100%-full reference
@@ -803,11 +803,11 @@ def load_session_reset(config_path: Path, now: datetime, last_activity_mtime: fl
     window_hours = float(data.get("session_window_hours") or SESSION_WINDOW_HOURS_DEFAULT)
 
     # Reset-on-first-activity (2026-08-04), replacing the earlier
-    # roll-forward-by-fixed-cycles approach (2026-08-02). Per Ian, live: the
+    # roll-forward-by-fixed-cycles approach (2026-08-02). Per the owner, live: the
     # old auto-roll was "pretty inaccurate" - it ticked the anchor forward by
     # a blind whole-cycle timer regardless of whether anything had actually
     # happened, so a quiet stretch with no real Claude usage still silently
-    # advanced the window as if a fresh one had started. Ian's own framing of
+    # advanced the window as if a fresh one had started. The owner's own framing of
     # how this actually works: "it essentially starts a 5hr timer when the
     # first Claude task or prompt or scheduled thing runs" after the
     # previous window closes - not on a fixed clock. That's a real behavior
@@ -835,7 +835,7 @@ def load_session_reset(config_path: Path, now: datetime, last_activity_mtime: fl
                 reported_at = activity_at
                 # Fresh window (2026-08-04): a brand-new session that just
                 # started has its FULL length ahead of it, not whatever
-                # partial amount was last manually reported (e.g. if Ian's
+                # partial amount was last manually reported (e.g. if the owner's
                 # last report was "3h18m left," that 3.3 was correct for
                 # THAT window's remaining countdown, but the next window
                 # after it starts with the full session_window_hours ahead,
@@ -854,7 +854,7 @@ def load_session_reset(config_path: Path, now: datetime, last_activity_mtime: fl
                         "start of the new session window (full session_window_hours ahead of it, "
                         "not the prior partial countdown). Estimate based on local file activity, "
                         "not a true live sync (no session-reset API exists) - overwritten the "
-                        "moment Ian reports a fresh 'resets in Xh Ym.'"
+                        "moment the owner reports a fresh 'resets in Xh Ym.'"
                     )
                     config_path.write_text(json.dumps(data, indent=2))
                 except OSError:
@@ -864,14 +864,14 @@ def load_session_reset(config_path: Path, now: datetime, last_activity_mtime: fl
     seconds_left = (target - now).total_seconds()
     reported_hours_ago = (now - reported_at).total_seconds() / 3600
 
-    # elapsed_fraction (2026-07-31, per Ian: "I don't need rolling/approximate...
+    # elapsed_fraction (2026-07-31, per the owner: "I don't need rolling/approximate...
     # I'd love a little time bar that ticks down... and restarts when session
     # timer restarts"). This doesn't change what's fundamentally knowable - the
-    # window's real length is still whatever Ian last reported (session_window_hours),
+    # window's real length is still whatever the owner last reported (session_window_hours),
     # not something this script can detect live (see this function's own
     # docstring) - it's a display upgrade, not a new capability. "Restarts
     # when session restarts" already just works with no extra code: this is
-    # recomputed fresh from session_reset.json every poll, so the moment Ian
+    # recomputed fresh from session_reset.json every poll, so the moment the owner
     # reports a new reported_at/hours_from_report, the fraction (and
     # therefore the bar) jumps to reflect the new numbers on its own.
     # Denominator switched from total_hours to window_hours (2026-08-04, real
@@ -879,7 +879,7 @@ def load_session_reset(config_path: Path, now: datetime, last_activity_mtime: fl
     # two different numbers: the bar should read "how much of the real ~5hr
     # window is left," not "how much of whatever was just reported is left"
     # (the latter always reads as nearly-full right after any report, which
-    # is what Ian caught live). Clamped to [0, 1] so a stale (already_passed)
+    # is what the owner caught live). Clamped to [0, 1] so a stale (already_passed)
     # anchor renders as a full bar rather than overshooting past it.
     elapsed_fraction = 1.0 if window_hours <= 0 else 1 - (seconds_left / (window_hours * 3600))
     elapsed_fraction = max(0.0, min(1.0, elapsed_fraction))
@@ -895,7 +895,7 @@ def load_session_reset(config_path: Path, now: datetime, last_activity_mtime: fl
 
 PERSONAL_HEALTH_INTERVAL_MINUTES = 60
 
-# AWAY_IDLE_THRESHOLD_MINUTES (2026-08-02, per Ian: "if there is idle or long
+# AWAY_IDLE_THRESHOLD_MINUTES (2026-08-02, per the owner: "if there is idle or long
 # periods where I am away, can we change the icon... I don't want it to be
 # in the 'needs a break' when I just am inactive or away"). No number given -
 # 5 minutes is a reasonable, easy-to-tune-later default for "genuinely
@@ -909,7 +909,7 @@ def get_system_idle_seconds() -> float | None:
     """macOS-only: seconds since the last keyboard/mouse input anywhere on
     the machine, read via `ioreg`'s HIDIdleTime (nanoseconds since last
     HID event). This is a real, commonly-used local signal (not an
-    Anthropic/Claude API - no such thing exists for "is Ian actively using
+    Anthropic/Claude API - no such thing exists for "is the owner actively using
     Claude specifically"), so it's an honest proxy for "away from the
     computer," not literally "away from Claude." Returns None if
     unavailable (wrong platform, ioreg missing, unexpected output) so
@@ -936,20 +936,20 @@ def load_personal_health(config_path: Path, now: datetime) -> dict | None:
     """Reads config/last_break.json - {"last_break_at": "<ISO timestamp>",
     "away_since": "<ISO timestamp>" | null} - and counts down from
     PERSONAL_HEALTH_INTERVAL_MINUTES (60) since last_break_at. Added
-    2026-07-31 per Ian, tied to wellbeing-check's "unhealthy pattern" open
+    2026-07-31 per the owner, tied to wellbeing-check's "unhealthy pattern" open
     question. The widget's own click handler rewrites last_break_at to "now"
-    when Ian marks a break taken by hand (locked to overdue-only, see
+    when the owner marks a break taken by hand (locked to overdue-only, see
     index.jsx) - away_since below is the automatic counterpart, added
     2026-08-02.
 
     Away handling: while get_system_idle_seconds() reports idle time past
     AWAY_IDLE_THRESHOLD_MINUTES, this freezes the countdown at the moment
     idle began (never counts down, never goes overdue, while away - per
-    Ian's explicit ask) and reports "away": True so the widget can swap to a
+    the owner's explicit ask) and reports "away": True so the widget can swap to a
     sleeping icon instead of the heartbeat. The instant activity resumes
     (idle drops back below threshold), last_break_at auto-resets to now -
     "auto start the 60m timer when I start working... again" - since a real
-    away stretch already functions as a break whether or not Ian clicked
+    away stretch already functions as a break whether or not the owner clicked
     anything. away_since is persisted so this only has to detect each
     away/active TRANSITION once, not re-derive it every 20s poll."""
     if not config_path.exists():
@@ -986,7 +986,7 @@ def load_personal_health(config_path: Path, now: datetime) -> dict | None:
         if away_since is None:
             # Just crossed the threshold - back-calculate the real moment
             # idle actually started (from idle_seconds itself) rather than
-            # freezing at "now," so the frozen countdown reflects when Ian
+            # freezing at "now," so the frozen countdown reflects when the owner
             # actually stepped away, not when this poll happened to notice.
             away_since = now - timedelta(seconds=idle_seconds)
             data["away_since"] = away_since.isoformat(timespec="seconds")
@@ -995,7 +995,7 @@ def load_personal_health(config_path: Path, now: datetime) -> dict | None:
     else:
         if away_since is not None:
             # Returning from an away stretch - auto-restart the 60m timer,
-            # per Ian's explicit ask, rather than resuming a countdown that
+            # per the owner's explicit ask, rather than resuming a countdown that
             # was frozen mid-way.
             last_break_at = now
             data["last_break_at"] = now.isoformat(timespec="seconds")
@@ -1015,7 +1015,7 @@ def load_personal_health(config_path: Path, now: datetime) -> dict | None:
 
     # Frozen while away: compute against the moment idle began, not "now,"
     # so the bar/label neither keeps ticking down nor flips overdue while
-    # Ian is genuinely away - exactly what he asked not to happen.
+    # the owner is genuinely away - exactly what he asked not to happen.
     effective_now = away_since if away else now
 
     total_seconds = PERSONAL_HEALTH_INTERVAL_MINUTES * 60
@@ -1060,7 +1060,7 @@ def _goal_match_tokens(text: str, exclude: set[str]) -> set[str]:
 
 def project_needs_ian_status(needs_ian_text: str, project: str, goal_text: str = "") -> str:
     """Per-project completion signal for load_daily_goal's per-item tracking
-    (2026-08-04), per Ian: "when a goal's real item gets completed the goal
+    (2026-08-04), per the owner: "when a goal's real item gets completed the goal
     can remain for the day but have strike thru and move to the bottom."
     Aggregate progress (see load_daily_goal's own docstring) can say a goal
     is done in general, but can't say WHICH goal - this can, for the common
@@ -1159,7 +1159,7 @@ def load_daily_goal(
     flagged here the same way every other honest-proxy signal in this file
     is (away-detection, session-reset auto-roll, etc.).
 
-    Schema change (2026-08-04), per Ian: "can the goal for the day be a list
+    Schema change (2026-08-04), per the owner: "can the goal for the day be a list
     as well... more readable." `goal_text` (single string) is replaced by
     `goals` (a list of strings) - the widget now renders this as a proper
     collapsible "Daily Goals" section (header + list) instead of one
@@ -1168,7 +1168,7 @@ def load_daily_goal(
     amount of tracker movement happened) - when `completed` flips true, the
     widget marks every item in the list done together, not individually.
 
-    Schema change again, same day, per Ian's direct follow-up: "have it
+    Schema change again, same day, per the owner's direct follow-up: "have it
     match the style of the other collapsible sections and have brief
     summary that can be explandable and have it clickable so that i can
     work on it in a new thread." Each entry in `goals` is now an object -
@@ -1181,7 +1181,7 @@ def load_daily_goal(
     older goals list written before this change doesn't just silently
     vanish.
 
-    Two more optional fields added the same day, per Ian's further
+    Two more optional fields added the same day, per the owner's further
     follow-up: "maybe sub sections can be summary, an explandable read out
     of what section it currently lives in and maybe the previous context
     piece or whatever." `current_section` (which tracker section/status the
@@ -1190,7 +1190,7 @@ def load_daily_goal(
     rendered as their own independently-expandable SubField in the widget,
     same shape ProjectRow already uses for Summary/Next steps/etc.
 
-    Per-item `completed` added (2026-08-04 follow-up), per Ian: "when a
+    Per-item `completed` added (2026-08-04 follow-up), per the owner: "when a
     goal's real item gets completed the goal can remain for the day but
     have strike thru and move to the bottom of the daily goals." The
     aggregate `progress`/`completed`/`target_count` above are kept exactly
@@ -1210,7 +1210,7 @@ def load_daily_goal(
     "can't tell" silently, it just
     inherits the coarser signal instead.
 
-    `requires_code` added same follow-up round, per Ian: "it should specify
+    `requires_code` added same follow-up round, per the owner: "it should specify
     if it should be pasted into a regular thread or code if it requires
     code or plugins." Reuses the directory convention INDEX.md/PROCESS.md
     already draw (`../Projects/` = real code, `ClaudeSpace/<name>/` =
@@ -1282,7 +1282,7 @@ def load_daily_goal(
 SKILL_NAME_RE = re.compile(r"^name:\s*(.+)$", re.MULTILINE)
 SKILL_DESC_RE = re.compile(r"^description:\s*(.+)$", re.MULTILINE)
 SKILL_CALLS_RE = re.compile(r"^calls:\s*(.+)$", re.MULTILINE)
-# Raised 160 -> 600 (2026-08-05), per Ian, looking at the Skill Tray's new
+# Raised 160 -> 600 (2026-08-05), per the owner, looking at the Skill Tray's new
 # click-to-open overlay live: "with this extra space we can have the
 # summary go longer and provide more info... this doesn't need to be
 # expandable but we can provide summary." The overlay already scrolls
@@ -1291,12 +1291,12 @@ SKILL_CALLS_RE = re.compile(r"^calls:\s*(.+)$", re.MULTILINE)
 # tooltip this overlay replaced several rounds ago, never revisited since.
 #
 # No longer a real display cap at all (2026-08-05, real bug found live) -
-# per Ian, seeing `time-assessor`'s own description cut off mid-sentence
+# per the owner, seeing `time-assessor`'s own description cut off mid-sentence
 # with a trailing "…": "i dont like the ... in the summary if we can have
 # scroll here we should rewrite summaries so they are complete ideas and
 # not trail off." The 600-char figure above was already wrong the day it
 # was set - claimed to "comfortably fit every real description... in full"
-# but `time-assessor`'s real description (the one in Ian's screenshot) was
+# but `time-assessor`'s real description (the one in the owner's screenshot) was
 # already longer than that. Checked every real SKILL.md `description:` in
 # this workspace: each one is already written as a complete, well-formed
 # paragraph ending in a real sentence - the "trailing off" was never a
@@ -1390,7 +1390,7 @@ def load_scripts_catalog(claude_space: Path, dashboard_visualizer_dir: Path) -> 
 
 
 def load_skills_catalog(claude_space: Path) -> list:
-    """Skills Tray data source (2026-08-04), per Ian: "i want to visualize
+    """Skills Tray data source (2026-08-04), per the owner: "i want to visualize
     and keep track of how often they are getting run and brief
     descriptions of what they do."
 
@@ -1403,7 +1403,7 @@ def load_skills_catalog(claude_space: Path) -> list:
     relationship-log.md elsewhere in this workspace, not hard telemetry)
     for call_count and how long ago each skill last ran.
 
-    manual_count/auto_count split (2026-08-04), real gap found live - Ian:
+    manual_count/auto_count split (2026-08-04), real gap found live - the owner:
     "it says these have never run? we need to keep track of when they ran
     and count the number of times... also we need to make sure these are
     all distinguished [manual vs auto-executed]." Root cause of "never
@@ -1413,14 +1413,14 @@ def load_skills_catalog(claude_space: Path) -> list:
     than fabricating history for skills that didn't actually run. Log
     entries now carry an optional `"trigger": "manual"|"auto"` field
     (missing/unrecognized values default to "manual", the safer assumption
-    since most historical calls were Ian asking directly) - each skill's
+    since most historical calls were the owner asking directly) - each skill's
     catalog entry reports `call_count` (total), `manual_count`, and
     `auto_count` separately so the widget can show "3x manual - 2x auto"
     instead of one undifferentiated number.
 
     `calls` field (2026-08-04) - some skills invoke OTHER skills as part
     of their own run (overnight-auto-execute calls log-pose and
-    time-assessor; goal-for-day calls time-assessor) - per Ian: "for these
+    time-assessor; goal-for-day calls time-assessor) - per the owner: "for these
     skills like log pose or auto exec they should include what other
     skills they run or call." Parsed the same single-line-frontmatter way
     as name/description, comma-separated skill names, only added to the
@@ -1455,7 +1455,7 @@ def load_skills_catalog(claude_space: Path) -> list:
             description = description[:SKILL_DESC_HARD_SAFETY_CAP].rsplit(" ", 1)[0] + " [truncated - malformed SKILL.md?]"
         calls_match = SKILL_CALLS_RE.search(text)
         calls = [c.strip() for c in calls_match.group(1).split(",") if c.strip()] if calls_match else []
-        # updated_hours_ago (2026-08-05) - per Ian: "provide... latest
+        # updated_hours_ago (2026-08-05) - per the owner: "provide... latest
         # update... when new skill is created or skill is updated skill
         # tray needs to update." SKILL.md's own mtime, same file-mtime
         # pattern every other "last touched"/"X hours ago" signal in this
@@ -1535,7 +1535,7 @@ def load_skills_catalog(claude_space: Path) -> list:
             if last:
                 catalog[skill]["last_called_hours_ago"] = round((now - last).total_seconds() / 3600, 1)
 
-    # called_by (2026-08-05) - the reverse of `calls`, per Ian: "provide...
+    # called_by (2026-08-05) - the reverse of `calls`, per the owner: "provide...
     # if its used by other skills." `calls` (built above, from each
     # skill's own SKILL.md frontmatter) only ever answers "what does THIS
     # skill invoke" - looking at, say, `time-assessor`'s own entry gives
@@ -1544,7 +1544,7 @@ def load_skills_catalog(claude_space: Path) -> list:
     # hand. One pass over the catalog once every `calls` list is known:
     # for each skill A that declares it calls skill B, append A's name to
     # B's own `called_by` list - a real, computed answer instead of
-    # something Ian would have to piece together himself from three
+    # something the owner would have to piece together himself from three
     # different skills' descriptions.
     for skill_entry in catalog.values():
         for called_name in skill_entry.get("calls", []):
@@ -1594,7 +1594,7 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
     catalog = load_catalog(catalog_path)
     sections = build_sections(claude_space, index_projects, catalog, now_ts)
 
-    # "Dormant" is a synthetic 5th section (2026-07-31, per Ian) - not a real
+    # "Dormant" is a synthetic 5th section (2026-07-31, per the owner) - not a real
     # status like active/idea/paused/done, just every project flagged stale
     # anywhere else, surfaced as its own subheader in the widget so it's not
     # buried inside Needs Attention as plain unclickable text. Same shape as
@@ -1615,7 +1615,7 @@ def build_summary(claude_space: Path, script_dir: Path) -> dict:
     # last DONE_RECENT_DAYS, using the same README-mtime signal as everything
     # else (see DONE_RECENT_DAYS' comment above). totals["done"] stays the
     # plain lifetime count exactly as before - this is an additional field,
-    # not a replacement, since Ian wants both shown (recent in tiny mode, both
+    # not a replacement, since the owner wants both shown (recent in tiny mode, both
     # in big mode).
     totals["done_recent"] = sum(
         1

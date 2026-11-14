@@ -13,12 +13,12 @@ import { THEME } from "../src/theme.config"
 // Content source (2026-08-03, first pass): cultureman and learnerman are
 // both still empty (no real entries yet — see their own READMEs and the
 // open question logged in NEEDS-IAN.md), so there's no real "bank of things
-// Ian likes/found" to pull from yet. Rather than block this whole module on
+// the owner likes/found" to pull from yet. Rather than block this whole module on
 // that, this first pass ships a small static list of dev/Claude-workflow
 // tips — genuinely useful on their own, and an easy thing to swap out for
 // real cultureman/learnerman content later (see TIPS below — that's the
 // only thing that needs to change). Flagging this as a first-pass content
-// choice for Ian's taste check, same as every other visual decision in this
+// choice for the owner's taste check, same as every other visual decision in this
 // project so far — not meant to be the final word on what belongs here.
 //
 // Rotation: deterministic by day-of-year (no state, no command, no external

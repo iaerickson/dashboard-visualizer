@@ -1,6 +1,6 @@
 # dashboard-visualizer ("Commandspace")
 
-A desktop widget system for macOS that shows the state of the ClaudeSpace project tracker at a glance: project counts and lists by status, what is waiting on Ian, usage-reset countdowns, and three hex-grid trays for skills, scripts and reports. It runs on [Übersicht](https://tracesof.net/uebersicht/), so the widgets sit on the desktop itself rather than in a window.
+A desktop widget system for macOS that shows the state of the ClaudeSpace project tracker at a glance: project counts and lists by status, what is waiting on you, usage-reset countdowns, and three hex-grid trays for skills, scripts and reports. It runs on [Übersicht](https://tracesof.net/uebersicht/), so the widgets sit on the desktop itself rather than in a window.
 
 **Status:** Parked. Fully working as of 2026-11-13, powered down on purpose until the workflow around it is settled and it can be refactored. Nothing here is broken; see [Turning it off and back on](#turning-it-off-and-back-on) to bring it back.
 **Started:** 2026-07-30
@@ -12,7 +12,7 @@ A desktop widget system for macOS that shows the state of the ClaudeSpace projec
 | --- | --- |
 | `widgets/claudespace-status/index.jsx` | The main "Commandspace" widget (the card, its sections, gauges and trays). |
 | `widgets/tip-of-day/index.jsx` | A small second widget: one static tip per day, rotates at midnight. |
-| `widgets/src/` | Shared theme. `theme.config.js` points at the active theme in `themes/` (currently `nerv.js`). |
+| `widgets/src/` | Shared modules. `paths.config.js` holds the folder paths; `theme.config.js` points at the active theme in `themes/` (currently `nerv.js`). |
 | `scripts/status_summary.py` | Reads the tracker and prints the JSON the main widget renders. The widget runs this every 20 seconds. |
 | `scripts/report_summary.py` | Helpers for parsing report files (used by `status_summary.py` and the Reports Tray). |
 | `scripts/mark_report_viewed.py` | Called by the widget when a report hex is opened, to mark it read. |
@@ -35,8 +35,8 @@ The widget never calls an LLM or any network service. It only reads local files.
 Übersicht loads widgets from `~/Library/Application Support/Übersicht/widgets/`. Link this repo's three widget folders into it so there is only ever one copy of the code:
 
 ```bash
-REPO="/Users/ianerickson/Desktop/Projects/dashboard-visualizer/widgets"
-UB="/Users/ianerickson/Library/Application Support/Übersicht/widgets"
+REPO="$HOME/Desktop/Projects/dashboard-visualizer/widgets"
+UB="$HOME/Library/Application Support/Übersicht/widgets"
 ln -s "$REPO/claudespace-status" "$UB/claudespace-status"
 ln -s "$REPO/tip-of-day"         "$UB/tip-of-day"
 ln -s "$REPO/src"                "$UB/src"
@@ -54,12 +54,14 @@ Then turn on clicking (hover works without this, clicks do not):
 1. Übersicht menu bar icon → Preferences → tick **Enable interaction**.
 2. System Settings → Privacy & Security → Accessibility → allow Übersicht.
 
-### Paths baked into the code
+### Pointing it at your folders
 
-Two places hold absolute paths. If the repo or the tracker folder ever moves, update both:
+All widget paths live in one file, `widgets/src/paths.config.js`:
 
-- `widgets/claudespace-status/index.jsx` → `export const command` (path to `status_summary.py` and to ClaudeSpace) and `CLAUDE_SPACE_FOLDER`.
-- The symlinks above.
+- `REPO_DIR`: where this repo is checked out (default `$HOME/Desktop/Projects/dashboard-visualizer`).
+- `CLAUDE_SPACE_DIR`: the tracker folder (default `$HOME/Desktop/ClaudeSpace`).
+
+If your layout differs, edit those two values (absolute paths work too), update the symlinks above to match, then quit and reopen Übersicht. The Python scripts take the tracker path as their first argument and fall back to `~/Desktop/ClaudeSpace`.
 
 ## Using it
 
@@ -100,7 +102,7 @@ The last five are live state, not settings, and are listed in `.gitignore` so gi
 ## Checks
 
 ```bash
-cd /Users/ianerickson/Desktop/Projects/dashboard-visualizer
+cd ~/Desktop/Projects/dashboard-visualizer
 python3 -m unittest discover -s tests          # 34 tests, a few milliseconds
 scripts/verify_widget.sh                       # widgets parse + status_summary.py runs
 python3 scripts/status_summary.py ~/Desktop/ClaudeSpace | python3 -m json.tool | head -40
@@ -152,4 +154,4 @@ Neither touches this repo or the symlinks. To bring it back, open Übersicht and
 
 ## Notes
 
-- 2026-11-13: README rewritten as a usage guide and the previous README moved to `docs/BUILD-LOG.md`. Project parked pending a refactor, per Ian: happy with where it got to, but powering it down until the workflow it serves is settled.
+- 2026-11-13: README rewritten as a usage guide and the previous README moved to `docs/BUILD-LOG.md`. Project parked pending a refactor, per the owner: happy with where it got to, but powering it down until the workflow it serves is settled.

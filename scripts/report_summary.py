@@ -3,13 +3,13 @@
 report_summary.py — Reads usage-scheduler's latest report and emits a
 JSON summary for the report-viewer widget to render.
 
-Built 2026-08-04, per Ian: "I want to work on and run the viewer for our
+Built 2026-08-04, per the owner: "I want to work on and run the viewer for our
 logs and usage summary reports so I can be presented with those and have
 those be more visible without having to hunt those down." Same read-only
 posture as status_summary.py (see that file's own docstring) - this reads
 usage-scheduler/latest-report.md, never writes to it. Meant to be called by report-viewer's own Übersicht `command`:
 
-    python3 /Users/ianerickson/Desktop/Projects/dashboard-visualizer/scripts/report_summary.py
+    python3 scripts/report_summary.py
 
 Output shape:
 
@@ -171,7 +171,7 @@ def load_latest_usage_report(claude_space: Path) -> dict | None:
     return load_usage_report_entry(report_path)
 
 
-# NUGGET_PERSONAS (2026-08-04), per Ian: report-viewer should "know to pull
+# NUGGET_PERSONAS (2026-08-04), per the owner: report-viewer should "know to pull
 # context or info from nuggets" the "___man"-family skills have collected in
 # the past, not just usage-scheduler. Checked each one's own
 # README directly before building anything here (2026-08-04) - real,
@@ -184,7 +184,7 @@ def load_latest_usage_report(claude_space: Path) -> dict | None:
 # forward-compatible plumbing, not filler content. It looks for
 # "<persona>/log.md" (protoman's own proposed shape: one running file per
 # persona, flat dated entries, newest at the bottom) and silently skips any
-# persona that doesn't have one yet - the moment Ian signs off on a format
+# persona that doesn't have one yet - the moment the owner signs off on a format
 # and any of these starts writing real entries, report-viewer picks it up
 # automatically, no widget changes needed.
 NUGGET_PERSONAS = ["historyman", "cultureman", "learnerman", "tutor"]

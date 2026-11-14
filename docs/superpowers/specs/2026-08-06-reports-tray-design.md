@@ -5,7 +5,7 @@
 
 ## Goal
 
-Add a third pop-out tray to the `claudespace-status` widget ("Commandspace"): a Reports Tray, showing the latest `ianlogger` daily entry and the latest `usage-scheduler` overnight report (plus a dormant, forward-compatible "Recent Nuggets" panel for the `___man`-family personas, matching what already exists). This **replaces** the standalone `report-viewer` widget entirely — same information, now living in Commandspace's tray system instead of a separate floating card, per Ian's direct call ("fold report viewer into this is a better way to handle it").
+Add a third pop-out tray to the `claudespace-status` widget ("Commandspace"): a Reports Tray, showing the latest `ianlogger` daily entry and the latest `usage-scheduler` overnight report (plus a dormant, forward-compatible "Recent Nuggets" panel for the `___man`-family personas, matching what already exists). This **replaces** the standalone `report-viewer` widget entirely — same information, now living in Commandspace's tray system instead of a separate floating card, per the owner's direct call ("fold report viewer into this is a better way to handle it").
 
 This is the third tray built on the shared `Tray`/`trayColumn` abstraction from the Script Tray work (2026-08-05) — the first to prove that abstraction generalizes to non-hex-grid content, since `Tray` was deliberately built to accept arbitrary `children` rather than being hardcoded to `HexGrid`.
 
@@ -39,7 +39,7 @@ from report_summary import load_latest_log, load_latest_usage_report, load_perso
 "nuggets": load_persona_nuggets(claude_space),
 ```
 
-`report_summary.py` itself is **not deleted** — it stays as a real, independently-runnable module (its own `__main__` entry point keeps working for anyone debugging it directly, matching this repo's existing "small deterministic scripts" convention). Only its **widget wrapper**, `widgets/report-viewer/index.jsx`, is deleted, along with whatever Übersicht symlink currently points at it (a manual step on Ian's machine — the plan will call this out explicitly rather than assume filesystem access to `~/Library/Application Support/Übersicht/widgets/` is available or safe to touch unprompted).
+`report_summary.py` itself is **not deleted** — it stays as a real, independently-runnable module (its own `__main__` entry point keeps working for anyone debugging it directly, matching this repo's existing "small deterministic scripts" convention). Only its **widget wrapper**, `widgets/report-viewer/index.jsx`, is deleted, along with whatever Übersicht symlink currently points at it (a manual step on the owner's machine — the plan will call this out explicitly rather than assume filesystem access to `~/Library/Application Support/Übersicht/widgets/` is available or safe to touch unprompted).
 
 ### 2. Tray: `Tray id="reports"`, `STATUS_PURPLE`, third in `trayColumn`
 
@@ -60,4 +60,4 @@ Same constraints as the Script Tray work: no JS test runner, no live-GUI access 
 - Any change to `report_summary.py`'s own loading/parsing logic — this only changes *who calls it*, not what it does.
 - Unifying `formatHoursAgo`'s two slightly different cutover thresholds across the file — kept as two distinctly-named functions, not a behavior change.
 - Building out the nuggets persona format itself (still an open, unresolved decision per `protoman/README.md` and `tutor/README.md`) — the nuggets panel stays exactly as dormant/forward-compatible as report-viewer already made it.
-- Actually removing the Übersicht symlink for `report-viewer` on Ian's machine — flagged as a manual step, not something the plan performs unprompted.
+- Actually removing the Übersicht symlink for `report-viewer` on the owner's machine — flagged as a manual step, not something the plan performs unprompted.

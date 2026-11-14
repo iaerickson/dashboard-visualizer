@@ -1,5 +1,6 @@
 import { css, run } from "uebersicht"
 import { THEME } from "../src/theme.config"
+import { REPO_DIR, CLAUDE_SPACE_DIR } from "../src/paths.config"
 
 // Copy-to-clipboard on click (2026-07-31, renamed from openInClaude - it no
 // longer opens Claude). History: this used to also shell out to
@@ -8,7 +9,7 @@ import { THEME } from "../src/theme.config"
 // Dropped the `q` prefill param earlier the same day once it was confirmed
 // (web search + Anthropic's own docs) that Claude Desktop's folder-trust
 // dialog always wipes it - deliberate security behavior, not a bug, nothing
-// this widget's code can route around. Ian's next live round: the `open`
+// this widget's code can route around. The owner's next live round: the `open`
 // call itself was still firing on every click, popping the trust dialog each
 // time even though the prefill inside it doesn't survive anyway - a jarring
 // app-switch for no real payoff. Per his direct call ("remove that
@@ -18,7 +19,7 @@ import { THEME } from "../src/theme.config"
 // round-trip avoids shell-escaping issues with the prompt's own quotes/
 // emoji) and flashes the row (`.copied-flash`) for ~1s so the click still
 // gives real feedback.
-const CLAUDE_SPACE_FOLDER = "/Users/ianerickson/Desktop/ClaudeSpace"
+const CLAUDE_SPACE_FOLDER = CLAUDE_SPACE_DIR
 
 const copyPrompt = (promptText, el) => {
   // const folder = encodeURIComponent(CLAUDE_SPACE_FOLDER) // only needed if the `open` call below is restored
@@ -28,7 +29,7 @@ const copyPrompt = (promptText, el) => {
     setTimeout(() => el.classList.remove("copied-flash"), 1000)
   }
   run(`echo ${b64Prompt} | base64 -D | pbcopy`).catch(() => {})
-  // Disabled 2026-07-31, per Ian - see comment above. To restore: uncomment
+  // Disabled 2026-07-31, per the owner - see comment above. To restore: uncomment
   // the `folder` line above and chain this after the copy resolves, same as
   // before:
   // .then(() => run(`open "claude://cowork/new?folder=${folder}"`).catch(() => {}))
@@ -72,7 +73,7 @@ const copyPrompt = (promptText, el) => {
 // mini with no mouse movement at all (root cause: Übersicht re-renders on
 // every refreshFrequency tick regardless of hover, and a reshaped tree can
 // birth a fresh DOM node mid-hover with none of the old node's classList
-// history - a stationary cursor never re-fires mouseenter on it). Ian's
+// history - a stationary cursor never re-fires mouseenter on it). The owner's
 // first fix for that: replace hover entirely with a click toggle on the
 // title. Tried live, then reversed the same day - "add hover back
 // alongside click... both ways work" - so this is now BOTH: the whole
@@ -147,15 +148,15 @@ const toggleExpanded = (e) => {
 //
 // Used to measure resetsSection's own position for the Skills Tray's
 // vertical placement (via a ResizeObserver, `positionSkillsTab`) - dropped
-// 2026-08-04, per Ian: the tray's resting position needed to be flush with
+// 2026-08-04, per the owner: the tray's resting position needed to be flush with
 // the CARD's own top edge, not resetsSection's bottom border (see
 // trayColumn's own `top: 0` comment) - simpler and exact, no
 // measurement needed at all anymore.
 let cardNode = null
 
 // ClaudeSpace path now passed explicitly (2026-08-05, real fragility fix) -
-// per Ian's screenshot of the widget itself erroring "couldn't read
-// tracker: ClaudeSpace folder not found at /Users/ianerickson/Desktop/
+// per the owner's screenshot of the widget itself erroring "couldn't read
+// tracker: ClaudeSpace folder not found at ~/Desktop/
 // Claude[Space]." status_summary.py falls back to `Path.home() /
 // "Desktop" / "ClaudeSpace"` when no argument is given (see its own
 // `claude_space = ...` line) - that resolves correctly under a normal
@@ -168,9 +169,11 @@ let cardNode = null
 // shell in closes off a real, if intermittent, failure mode rather than
 // just hoping HOME is always set the way a normal Terminal session sets
 // it.
+// Paths now come from ../src/paths.config.js (double-quoted so $HOME
+// expands) instead of being hardcoded here; the tracker path is still
+// passed explicitly for the reason above.
 export const command =
-  "python3 '/Users/ianerickson/Desktop/Projects/dashboard-visualizer/scripts/status_summary.py' " +
-  "'/Users/ianerickson/Desktop/ClaudeSpace'"
+  `python3 "${REPO_DIR}/scripts/status_summary.py" "${CLAUDE_SPACE_DIR}"`
 
 // The widget reads INDEX.md/NEEDS-IAN.md/READMEs directly, so anything
 // that edits those files — including a log-pose run — shows up here
@@ -194,7 +197,7 @@ export const updateState = (event, previousState) => {
   }
 }
 
-// Position (2026-07-31, per Ian: align with the top edge like the native
+// Position (2026-07-31, per the owner: align with the top edge like the native
 // Calendar/Weather desktop widgets, which sit close to the very top of the
 // screen). Übersicht positions widgets absolute relative to the screen minus
 // the menu bar, so `top` here is measured from just below the menu bar, same
@@ -214,7 +217,7 @@ export const className = `
 // pulse. No logos/copyrighted marks reproduced - just the palette + layout
 // language. Colors live in their own file under widgets/src/themes/, with
 // widgets/src/theme.config.js as the one pointer you edit to swap which
-// theme file is active (Ian: "could be fun" to swap styles later) - see
+// theme file is active (the owner: "could be fun" to swap styles later) - see
 // those two files for how to add or switch styles. Moved 2026-08-04 from a
 // per-widget src/ folder to a shared top-level widgets/src/ so every widget
 // (claudespace-status, tip-of-day, and future ones) can import the exact
@@ -285,7 +288,7 @@ const IconDone = ({ size = 12 }) => (
   </svg>
 )
 
-// IconGoalDone (2026-08-04, per Ian: "maybe the goal can be crossed off
+// IconGoalDone (2026-08-04, per the owner: "maybe the goal can be crossed off
 // once it's achieved and a little success or good icon takes its place").
 // A four-point sparkle rather than reusing IconDone's diamond-check - this
 // marks a specific daily moment ("today's goal, hit"), not the same thing
@@ -307,7 +310,7 @@ const IconGoalDone = ({ size = 12 }) => (
 // (Active's ring, Idea's spark, etc.) now that the goal panel is a real
 // collapsible Section instead of a one-off styled block. See DailyGoals'
 // own comment near the Section component for the full restyle context.
-// Simplified (2026-08-04), per Ian: "the mini goal bullets are a nice
+// Simplified (2026-08-04), per the owner: "the mini goal bullets are a nice
 // touche but theyre too big they should be smaller and try to have it
 // match similar style standard." The original 3-concentric-circle target
 // had noticeably more visual ink than every other single-ring icon in this
@@ -351,7 +354,7 @@ const IconAsk = ({ size = 12 }) => (
 )
 
 // Replaces the old 🗑️ trash icon for "hasn't been touched in a while." Trash
-// implies "delete this," which isn't the point (see Ian's 2026-07-31 note -
+// implies "delete this," which isn't the point (see the owner's 2026-07-31 note -
 // low-priority isn't the same as abandoned) - a clock reads as "time has
 // passed" without that judgment. Muted/dim color on purpose, matching the
 // "informational, not urgent" intent - see the "dormant" wording change
@@ -370,7 +373,7 @@ const IconDormant = ({ size = 12 }) => (
   </svg>
 )
 
-// Backlog (2026-07-31, per Ian: "we still need a backlog section here too") -
+// Backlog (2026-07-31, per the owner: "we still need a backlog section here too") -
 // a small stacked-tray icon (two shallow trapezoids) reads as "queued/set
 // aside," distinct from Active's ring, Idea's spark, Paused's bars, Done's
 // check, and Dormant's clock.
@@ -381,7 +384,7 @@ const IconBacklog = ({ size = 12 }) => (
   </svg>
 )
 
-// Bin (2026-08-04, per Ian: "another section i want for the project tracker
+// Bin (2026-08-04, per the owner: "another section i want for the project tracker
 // is a bin/trash to discard ideas we don't wanna do anymore and keep track
 // of stuff that way"). A plain trash-can outline - the one icon in this set
 // that's fine being literal/unambiguous rather than abstract, since "bin"
@@ -406,7 +409,7 @@ const IconBin = ({ size = 12 }) => (
   </svg>
 )
 
-// IconHeartbeat (2026-07-31, per Ian: "a little cool icon for brain or
+// IconHeartbeat (2026-07-31, per the owner: "a little cool icon for brain or
 // health or a little body outline" on the new personal-health gauge). Went
 // with an EKG/pulse line over a brain or body outline - both of those need
 // more curve detail than reads cleanly at this file's established 12x12
@@ -416,13 +419,13 @@ const IconBin = ({ size = 12 }) => (
 // everywhere else in this file (IconBlocked, Needs Attention), and this
 // icon shouldn't borrow that alarm meaning; the gauge's own HSL fill
 // already carries the real urgency signal as it depletes.
-// `color` prop added (2026-07-31, per Ian: "break icon should be in mini
+// `color` prop added (2026-07-31, per the owner: "break icon should be in mini
 // mode and have a similar color change correspondence where it starts green
 // if closer to fresh start and changes color closer to necessary break") -
 // optional, defaults to the static amber used in big mode's gauge label so
 // that call site is unaffected; the new mini-mode pill below passes the
 // same HSL hue the gauge itself uses, computed from remainingFraction.
-// IconSession / IconUsage (2026-08-04), per Ian: "if there are icons we can
+// IconSession / IconUsage (2026-08-04), per the owner: "if there are icons we can
 // use for session and weekly usage that would be nice so that break session
 // and usage can all be aligned." Only Last Break had an icon before this -
 // these two match its size/muted-dim treatment so all three gauges read as
@@ -456,7 +459,7 @@ const IconHeartbeat = ({ size = 12, color = NERV_AMBER }) => (
   </svg>
 )
 
-// IconSleep (2026-08-02, per Ian: "change the icon to a little z's or
+// IconSleep (2026-08-02, per the owner: "change the icon to a little z's or
 // sleeping to signify I am away"). A single "Z" reads clearly as sleep/away
 // at this file's 12x12 icon size - a literal zzz or moon-and-stars needs
 // more detail than survives that small (same reasoning IconHeartbeat's own
@@ -476,7 +479,7 @@ const IconSleep = ({ size = 12, color = STATUS_BLUE }) => (
   </svg>
 )
 
-// Idle ambient activity (2026-07-31, per Ian: "add more little animations...
+// Idle ambient activity (2026-07-31, per the owner: "add more little animations...
 // blinking stuff to make Commandspace feel more like the NERV MAGI computers,
 // or just feel like there is some activity happening or processing even if
 // idle" - purely decorative, doesn't reflect any real backend state, same
@@ -490,7 +493,7 @@ const IconSleep = ({ size = 12, color = STATUS_BLUE }) => (
 // later.
 // cardOuter / cardInner split (2026-08-04) - was one `card` div until the
 // Skills Tray needed to be "treated as part of big mode that expands and
-// collapses at the exact same time" (Ian, live, after seeing the tray pop
+// collapses at the exact same time" (the owner, live, after seeing the tray pop
 // in/out on its own separate timing and briefly linger after a mini-mode
 // collapse - a real desync bug, not just a style nitpick). The old single
 // div HAD to keep `overflow: hidden` (needed for the ambient sweep
@@ -516,7 +519,7 @@ const IconSleep = ({ size = 12, color = STATUS_BLUE }) => (
 const cardOuter = css`
   position: relative;
 
-  /* Real bug (2026-07-31), per Ian: "navigating items towards the bottom of
+  /* Real bug (2026-07-31), per the owner: "navigating items towards the bottom of
      the scroll... quickly go back to mini... shouldn't collapse unless the
      pointer exits the boundary of the big mode dimensions." Pure CSS :hover
      was the trigger here, which is SUPPOSED to only react to the pointer's
@@ -641,7 +644,7 @@ const tinyStatWarn = css`
   }
 `
 
-// Smoother expand animation (2026-07-31, per Ian: "any option to make the
+// Smoother expand animation (2026-07-31, per the owner: "any option to make the
 // render on the expand animation more fluid/visually easy/smooth"). The old
 // approach animated max-height: 0 -> a guessed cap (600px here), which always
 // runs the full transition duration regardless of how much content actually
@@ -657,7 +660,7 @@ const tinyStatWarn = css`
 // either way. Also swapped the easing curve to a softer "expo-out" feel
 // (`cubic-bezier(0.16, 1, 0.3, 1)`) in place of the previous standard
 // "material" curve, per the same ask.
-// Collapse exit-delay (2026-07-31, per Ian: "the sensitivity to collapse back
+// Collapse exit-delay (2026-07-31, per the owner: "the sensitivity to collapse back
 // into mini mode is a little fickle... scrolling down a big list, as I get to
 // the bottom it seemingly collapses to mini kind of easily"). Root cause not
 // fully provable from here (Übersicht's outer widget container isn't
@@ -726,7 +729,7 @@ const title = css`
 `
 
 // Daily Goals section (2026-08-04) - restyled from a single bold-orange
-// line into a proper collapsible Section, per Ian: "can the goal for the
+// line into a proper collapsible Section, per the owner: "can the goal for the
 // day be a list as well and have daily goals as a header. I want it to
 // look nicer and be more readable. also daily goals should be another
 // thing that is collapsable/expandable. most new implementations to
@@ -740,7 +743,7 @@ const title = css`
 // project's SKILL.md), never generated here (same free/deferred split as
 // everything else in this file).
 //
-// Bold-orange text walked back the same day, per Ian's direct follow-up:
+// Bold-orange text walked back the same day, per the owner's direct follow-up:
 // "scratch what i said about the orange have it match the style of the
 // other collapseabile sections and have brief summary that can be
 // explandable and have it clickable so that i can work on it in a new
@@ -755,7 +758,7 @@ const goalItemDone = css`
   text-decoration: line-through;
 `
 
-// Reverted (2026-08-04) back to its original plain/dim styling, per Ian:
+// Reverted (2026-08-04) back to its original plain/dim styling, per the owner:
 // "keep last touched how it was" - a same-round bold/orange pass got
 // walked back once he clarified the orange-bold treatment was meant for
 // the new goal panel above, not this row too.
@@ -773,7 +776,7 @@ const resetsSection = css`
   border-bottom: 1px solid ${NERV_LINE};
 `
 
-// Made inline (2026-08-04), per Ian: even after shortening this text
+// Made inline (2026-08-04), per the owner: even after shortening this text
 // (previous round), a gauge WITH a stale/reset message still rendered one
 // line taller than a gauge without one - Last Break and Session never quite
 // matched heights depending on which state each happened to be in. Moved
@@ -790,12 +793,12 @@ const resetStale = css`
   white-space: nowrap;
 `
 
-// Reset gauge layout (2026-07-31, per Ian: with only the session bar built,
+// Reset gauge layout (2026-07-31, per the owner: with only the session bar built,
 // "not clear which is which" between it and weekly usage - both trackers now
 // get their own gauge, label on the left, bar + value stacked and
 // right-aligned underneath it on the right, so each bar sits directly under
 // its own reading instead of floating ambiguously between two labels).
-// Alignment fix (2026-07-31, per Ian, live: "bars on same level as their
+// Alignment fix (2026-07-31, per the owner, live: "bars on same level as their
 // associated value... time approx directly under, small, right align" - the
 // first version used align-items: flex-end, which aligns by the BOTTOM of
 // each column - since the label is one short line and the bar+value column
@@ -825,7 +828,7 @@ const resetItemLabel = css`
   color: ${NERV_TEXT_DIM};
 `
 
-// Fixed icon slot (2026-08-04), per Ian: "i dont like that the icon
+// Fixed icon slot (2026-08-04), per the owner: "i dont like that the icon
 // displaces last break in" - back when only Last Break carried an icon,
 // its label text started further right than Session/Weekly Usage's own
 // text (which began flush at the row's left edge with no icon before it).
@@ -862,7 +865,7 @@ const sectionsWrap = css`
   border-top: 1px solid ${NERV_LINE};
 `
 
-// Alignment fix (2026-07-31, per Ian: "the alignment of subspace headers are
+// Alignment fix (2026-07-31, per the owner: "the alignment of subspace headers are
 // not even"). Root cause: the "[ ... ]" brackets were a ::before/::after pair
 // on the FLEX CONTAINER itself, which makes them their own flex items - so
 // justify-content: space-between was distributing 4 items (bracket, label,
@@ -872,7 +875,7 @@ const sectionsWrap = css`
 // (label span gets a "[ " ::before, count span gets a " ]" ::after) - back to
 // exactly 2 flex items, so space-between always pins the label flush left and
 // the count flush right regardless of text length.
-// Spacing fix (2026-08-04), per Ian: "spacing on bin and dormant doesnt
+// Spacing fix (2026-08-04), per the owner: "spacing on bin and dormant doesnt
 // look equal to all the others." Root cause: this used MARGIN, which
 // collapses between adjacent sibling block boxes - two zero-item sections
 // back to back (Dormant, Bin - neither renders a list underneath) had
@@ -910,7 +913,7 @@ const sectionHeaderCount = css`
   }
 `
 
-// Spacing fix (2026-07-31, per Ian: "these subspaces need to be spaced
+// Spacing fix (2026-07-31, per the owner: "these subspaces need to be spaced
 // equal, the 4 recently done doesn't need to push space or change that -
 // have it be inline... or hanging in that space"). This used to be a normal
 // block below the header, adding its own line of real layout height - the
@@ -928,7 +931,7 @@ const sectionSubnote = css`
   color: rgba(255, 255, 255, 0.35);
 `
 
-// Hover-intent added here too (2026-07-31), per Ian: "interior items inside
+// Hover-intent added here too (2026-07-31), per the owner: "interior items inside
 // of idea active open almost immediately on hover, can we slow that down a
 // little." This was deliberately instant (transition-delay: 0s) up to now -
 // matches every other hover-intent value already in this file (260ms, the
@@ -954,7 +957,7 @@ const projectItem = css`
   }
 `
 
-// Per-section hover color (2026-07-31, per Ian: "just want to test out" the
+// Per-section hover color (2026-07-31, per the owner: "just want to test out" the
 // highlighted row taking on its own section's color - active green (its
 // icon's color), idea yellow/amber, paused blue, done teal (the closest
 // established "green" - Done's own icon already uses this, not a second
@@ -971,11 +974,11 @@ const hoverTint = (color) => css`
   }
 `
 
-// Renamed from "stale" to "dormant" in display text (2026-07-31, per Ian):
+// Renamed from "stale" to "dormant" in display text (2026-07-31, per the owner):
 // this flag just means "hasn't been touched in 30+ days with no checked
 // items/notes" (see system-healthcheck's proposed definition) - a recency
 // signal, not a priority/importance judgment. "Stale" reads as "should be
-// thrown out"; a low-priority-but-still-wanted project (Ian's example:
+// thrown out"; a low-priority-but-still-wanted project (the owner's example:
 // jrpg-portfolio) shouldn't look condemned just for being quiet a while.
 // Muted color to match - this isn't meant to alarm. (Underlying data field
 // is still called "stale" - system-healthcheck's own naming, a separate,
@@ -1006,7 +1009,7 @@ const staleTag = css`
 // inner wrapper - it owns the padding, which still animates on its own (0 8px
 // -> 6px 8px) since that's a real visual "breathing room" effect worth
 // keeping independent of the height reveal.
-// Trunk-bar continuity fix (2026-07-31), per Ian's screenshot: "the two side
+// Trunk-bar continuity fix (2026-07-31), per the owner's screenshot: "the two side
 // bars are wholly unconnected." Root cause, found by tracing actual pixel
 // math rather than eyeballing it again: projectItem's own hover border-left
 // (the per-section-color row highlight) renders at ITS box's true left edge -
@@ -1016,7 +1019,7 @@ const staleTag = css`
 // separately-positioned vertical line, offset 8px right of the row's, and
 // only spanning detail's own height (i.e. starting below the name line, not
 // from the top of the row). Two visibly disconnected segments, exactly what
-// Ian flagged. Fixed the same way stepsWrap already reconnects to detail's
+// the owner flagged. Fixed the same way stepsWrap already reconnects to detail's
 // own border below: margin-left: -8px pulls detail's border out to x=0,
 // exactly overlapping projectItem's row-level border into ONE continuous
 // line from the top of the hovered row down through the whole expanded
@@ -1067,7 +1070,7 @@ const scrollList = css`
   padding-right: 2px;
 `
 
-// Per-section nested collapse (2026-07-31, later made universal per Ian:
+// Per-section nested collapse (2026-07-31, later made universal per the owner:
 // "keep all sub spaces collapsed until hover"): every section (Active,
 // Idea, Paused, Done) and Needs Attention default collapsed to just their
 // header within big mode - hovering that specific section reveals its
@@ -1076,25 +1079,25 @@ const scrollList = css`
 // same pattern as the card-level and per-project reveals elsewhere in this
 // file). Originally Active was left always-visible while the rest were
 // collapsible; unified to all-collapsed after seeing it live.
-// Hover-intent delay (2026-07-31, per Ian: "a slight delay so I can move over
+// Hover-intent delay (2026-07-31, per the owner: "a slight delay so I can move over
 // sub headers without immediately triggering... a natural fluid movement down
 // can get there and not trigger right away"). transition-delay is set in the
 // :hover rule for the ENTRY side - when the mouse enters, this rule's delay
 // governs the transition to the expanded state, so quickly passing over a
 // header on the way to a different one never gets far enough into the delay
-// to visibly expand. Bumped 220ms -> 380ms (2026-07-31, per Ian, live: "hover
+// to visibly expand. Bumped 220ms -> 380ms (2026-07-31, per the owner, live: "hover
 // needs just a tick longer... it's a little hard to move slowly down without
 // expanding something"), then -> 550ms the same day per his live follow-up
 // that Active/Idea specifically still expanded "too quickly."
 //
-// Exit delay added the same day, per a real bug Ian caught: "I go from
+// Exit delay added the same day, per a real bug the owner caught: "I go from
 // bottom of ideas to needs attention, it collapses before I can move my
 // pointer down there" - even though the pointer never left the card's own
 // boundary (already fixed separately, see card's own is-expanded comment).
 // Root cause here: nestedList's own base (non-hover) transition had NO
 // delay, so the instant the pointer left one section's hover zone en route
 // to another, that section's nested list started collapsing (and reflowing
-// the layout) immediately - a moving target while Ian was still mid-transit
+// the layout) immediately - a moving target while the owner was still mid-transit
 // toward the next section. Same "hover intent," just for the exit side this
 // time, and same pattern already proven for the top-level card/expandWrap
 // pair: the delay now lives on nestedList's own base transition (below)
@@ -1105,7 +1108,7 @@ const scrollList = css`
 // "generous enough to never clip," meaning the transition always ran its full
 // duration against mostly-empty space for short lists). Now animates to the
 // nested list's real measured height instead.
-// Real bug found live (2026-07-31), per Ian: grouped Needs Attention items
+// Real bug found live (2026-07-31), per the owner: grouped Needs Attention items
 // were showing fully expanded, unhidden, the instant Needs Attention itself
 // was hovered - not staying collapsed until their OWN group header was
 // hovered. Root cause: this rule used a descendant combinator (`.nested`,
@@ -1143,7 +1146,7 @@ const nestedInner = css`
   min-height: 0;
 `
 
-// Expandable children (2026-07-31, per Ian: "would like you to start making
+// Expandable children (2026-07-31, per the owner: "would like you to start making
 // these all expandable children too"). Reuses `detail`/`detailInner` as-is
 // (same grid 0fr->1fr reveal, same visual language as every project row's
 // own detail panel) - the only new piece is triggering that reveal here,
@@ -1163,7 +1166,7 @@ const attentionRow = css`
   border-left: 2px solid transparent;
   transition: background 0.2s ease, border-color 0.2s ease;
 
-  /* Fourteenth-round bump (2026-07-31): Ian tested three hover targets side
+  /* Fourteenth-round bump (2026-07-31): the owner tested three hover targets side
      by side and called out "well-being check" (a single, non-grouped
      Needs Attention item, revealed here) as still expanding too quick even
      after the Thirteenth round's 0s -> 260ms fix - meanwhile Active
@@ -1191,7 +1194,7 @@ const attentionKind = css`
   flex-shrink: 0;
 `
 
-// Project grouping (2026-07-31), per Ian: "inside of any subheader like
+// Project grouping (2026-07-31), per the owner: "inside of any subheader like
 // active or needs attention, every item connected or part of the same scope
 // or project should get linked together into another new subheader that can
 // expand." Needs Attention items that share a `` `project-name` `` reference
@@ -1214,14 +1217,14 @@ const groupNestedIndent = css`
   padding-left: 10px;
 `
 
-// Skills Tray (2026-08-04), per Ian: "i want to visualize and keep track
+// Skills Tray (2026-08-04), per the owner: "i want to visualize and keep track
 // of how many skills we have created and get a visual read out of how
 // often they are getting run and brief descriptions of what they do."
 //
 // Rebuilt twice the same day. First version was a small vertical tab
 // rendered as a SIBLING of the whole card (needed to escape `card`'s own
 // `overflow: hidden`), mounted/unmounted via `{cardExpanded && ...}` with
-// its own separate spin-in animation. Ian, live: "skills tray is kind of
+// its own separate spin-in animation. The owner, live: "skills tray is kind of
 // ugly. i dont want it to overlap anything on command space... maybe a
 // half circle that perfectly lines up with the top of the big mode bar
 // with the first orange line after weekly usage... it needs to expand
@@ -1234,7 +1237,7 @@ const groupNestedIndent = css`
 // That last line is the real design instruction, not just flavor text -
 // "part of big mode," not a bolted-on extra with its own timing. The
 // mount/unmount approach COULDN'T deliver that: React unmounting a node
-// has no collapse animation at all (instant gone - the "lingering" Ian
+// has no collapse animation at all (instant gone - the "lingering" the owner
 // saw was this component's old DOM node still painted for a frame while
 // the card itself had already shrunk back to mini width, since the two
 // were never actually synchronized). Fixed at the structural level - see
@@ -1250,12 +1253,12 @@ const groupNestedIndent = css`
 // there's no separate JS trigger left to desync.
 //
 // Other changes this round:
-//   - Pops out on the LEFT now (Ian: "the half circle is supposed to pop
+//   - Pops out on the LEFT now (the owner: "the half circle is supposed to pop
 //     out on the left"), not the right - `trayColumn`'s `left` offset
 //     mirrors the math the old right-side version used (flush, zero
 //     overlap into the card), and the bump's rounded corners flipped to
 //     the left side to match.
-//   - Bigger for real legibility (Ian: "this is so small you cant read
+//   - Bigger for real legibility (the owner: "this is so small you cant read
 //     the text") - 56px x 168px (still a true semicircle: width ==
 //     height/2) instead of the old 40x80, with the vertical label bumped
 //     to 11px and a little letter-spacing room to breathe.
@@ -1271,7 +1274,7 @@ const groupNestedIndent = css`
 //     back over the card.
 let activeTrayId = null
 
-// activeHexKey (2026-08-11, real bug fix) - per Ian's screenshot: Reports
+// activeHexKey (2026-08-11, real bug fix) - per the owner's screenshot: Reports
 // Tray blanked out entirely after clicking a hex. Unlike activeTrayId
 // above, which hexes' own is-active class had NOTHING tracking it
 // persistently - a fresh render() landing right as/after the click (a
@@ -1306,7 +1309,7 @@ const toggleTray = (trayId, e) => {
   syncTrayStackOrder()
 }
 
-// syncTrayStackOrder (2026-08-10) - per Ian's exact spec: "if there are
+// syncTrayStackOrder (2026-08-10) - per the owner's exact spec: "if there are
 // N tabs, there are n positions in the stack. they default in current
 // order with skills at position 1. when one tab is hovered, it takes
 // position 1, and all other tabs cascade down to take remaining
@@ -1336,7 +1339,7 @@ const syncTrayStackOrder = () => {
   ranked.forEach((t, position) => { t.style.zIndex = String(100 - position) })
 }
 
-// toggleHexSelection/resetHexSelection (2026-08-04) - per Ian: "when you
+// toggleHexSelection/resetHexSelection (2026-08-04) - per the owner: "when you
 // hover over them they are not legible at all they need to overtake the
 // skill tray with an overlay... until you click it, or if you leave the
 // skill tray it just resets." Replaces the old `&:hover .hex-overlay` CSS
@@ -1365,7 +1368,7 @@ const toggleHexSelection = (e) => {
   if (!wasActive) {
     cell.classList.add("is-active")
     // 2026-08-08 fix (final review, Finding 2), corrected 2026-08-10 -
-    // per Ian: "if clicking a skill and scrolling down, clicking a
+    // per the owner: "if clicking a skill and scrolling down, clicking a
     // different skill locks the scroll bar" and separately "trying to
     // click an unused skill doesn't let me view or see the summary" -
     // both the same bug. This always targeted `.tray-list`
@@ -1410,7 +1413,7 @@ const syncActiveHex = () => {
   if (cell && !cell.classList.contains("is-active")) cell.classList.add("is-active")
 }
 
-// syncTrayListHeight (2026-08-10, real bug fix, round 3) - per Ian: "it
+// syncTrayListHeight (2026-08-10, real bug fix, round 3) - per the owner: "it
 // should expand when clicked but doesnt need to scroll unless there are
 // more than 9 reports... no purpose or utility in scrolling when u can
 // view them all." Two prior attempts (a static max-height, then a forced
@@ -1434,7 +1437,7 @@ const syncTrayListHeight = () => {
   document.querySelectorAll(".tray-wrap.is-open .tray-list-inner").forEach((el) => {
     const activeOverlay = el.querySelector(".hex-cell.is-active .hex-overlay")
     // scrollHeight vs offsetHeight (2026-08-10, real bug fix, round 4) -
-    // per Ian's screenshot: the browsing-grid box ballooned to a huge,
+    // per the owner's screenshot: the browsing-grid box ballooned to a huge,
     // mostly-empty size. Verified with a throwaway test page: every
     // hex's overlay renders its full report text in the DOM at all
     // times (opacity: 0 when inactive, not display: none), and
@@ -1451,14 +1454,14 @@ const syncTrayListHeight = () => {
     // offsetHeight, which reflects only its own actual rendered box.
     const natural = activeOverlay ? activeOverlay.scrollHeight : el.querySelector(".hex-wrap")?.offsetHeight
     if (natural == null) return
-    // Separate cap for reading vs browsing (2026-08-10) - per Ian, once
+    // Separate cap for reading vs browsing (2026-08-10) - per the owner, once
     // the ballooning bug above was fixed: "still kinda ugly... ok to
     // have a scroll bar when report is selected." One open report
     // doesn't need the full 9-row browsing allowance - see
     // READING_MAX_HEIGHT's own comment.
     const cap = activeOverlay ? READING_MAX_HEIGHT : TRAY_LIST_MAX_HEIGHT
     // Never shrink below the browsing grid's own height (2026-08-10,
-    // real bug fix, round 6) - per Ian: "window pops up for a second and
+    // real bug fix, round 6) - per the owner: "window pops up for a second and
     // then disappears," narrowed down to "only for skills in row 3 or
     // greater." Root cause: opening a hex low in a tall grid (Skill
     // Tray's 13 items run 5 rows deep) immediately shrinks this box from
@@ -1490,12 +1493,12 @@ const syncTrayListHeight = () => {
 // out backwards: render() is now hooked directly (see its own comment),
 // which catches every actual data refresh precisely, and a periodic
 // poll that mutates the DOM every 3 seconds regardless of whether
-// anything changed was the leading suspect for a real glitch Ian caught
+// anything changed was the leading suspect for a real glitch the owner caught
 // on screen - a tray left open briefly ballooning to nearly full desktop
 // height for a few frames. Removing the poll entirely removes that
 // suspect; the render() hook covers its original purpose exactly.
 
-// resetAllTrays (2026-08-04, real bug) - per Ian: "when it sometimes
+// resetAllTrays (2026-08-04, real bug) - per the owner: "when it sometimes
 // goes from mini mode to big mode it still pulls out skills in full tray
 // whenever it goes mini mode to big mode, it needs to always start with
 // the little tray half circle." Root cause: `activeTrayId` and the
@@ -1516,7 +1519,7 @@ const resetAllTrays = (cardEl) => {
   activeTrayId = null
 }
 
-// Rebuilt a third time (2026-08-04) - per Ian, seeing the two-piece
+// Rebuilt a third time (2026-08-04) - per the owner, seeing the two-piece
 // version live: "so much better!! almost there when highlighted the line
 // looks like it goes just a hair above. Also the drop down menu... this
 // simply will not do. it needs to be cohesive. the have circle should
@@ -1544,7 +1547,7 @@ const resetAllTrays = (cardEl) => {
 // moves, growing only extends the LEFT edge further out. One shape, one
 // fixed anchor point, grows in place - literally a container transform.
 //
-// top: 0, box-sizing: border-box (2026-08-04, revised again) - per Ian:
+// top: 0, box-sizing: border-box (2026-08-04, revised again) - per the owner:
 // "NOW off on alignment when not selected." The previous round's `top: 1px`
 // nudge (meant to correct a reported "hair above" gap) evidently
 // overcorrected or wasn't the real fix - reverted to the exact, unfudged
@@ -1564,7 +1567,7 @@ const resetAllTrays = (cardEl) => {
 // so the tray's enter/exit rides the exact same state change and timing
 // as the rest of big mode - unchanged from the previous round, see that
 // history for the full reasoning.
-// TRAY_STAGGER_OVERLAP (2026-08-10) - per Ian: "i want the tab trays to
+// TRAY_STAGGER_OVERLAP (2026-08-10) - per the owner: "i want the tab trays to
 // stagger a lil bit to save space... if more tabs are added we can
 // stagger them more closely." A flat negative margin-top on every
 // tray-wrap (trayBoxStyles, below) pulls each one up to overlap the
@@ -1582,7 +1585,7 @@ const resetAllTrays = (cardEl) => {
 // card top, same as before staggering existed) while every subsequent
 // tray's margin still overlaps the one above it normally. Kept as one
 // named constant, not hand-copied in two places, specifically because
-// Ian's own ask already anticipates tuning it tighter once a 4th/5th
+// the owner's own ask already anticipates tuning it tighter once a 4th/5th
 // tray exists (Plan B) - one number to change, not two that could drift
 // out of sync.
 const TRAY_STAGGER_OVERLAP = 28
@@ -1618,7 +1621,7 @@ const trayBoxStyles = (accentColor) => css`
   }
 
   /* Explicit default stacking order (2026-08-10, real bug fix) - per
-     Ian's screenshot: "only 1 tab should only ever be top at a time."
+     the owner's screenshot: "only 1 tab should only ever be top at a time."
      Every tray-wrap shared the SAME base z-index (5, above), an exact
      tie - equal z-index falls back to DOM/paint order to break ties, but
      that still isn't a deliberate, visible ordering: two overlapping
@@ -1642,7 +1645,7 @@ const trayBoxStyles = (accentColor) => css`
   &:nth-child(8) { z-index: 6; }
 
   /* Stack ranking now fully JS-driven, not CSS (2026-08-10, real bug fix,
-     round 4) - per Ian's exact spec: "if there are N tabs, there are n
+     round 4) - per the owner's exact spec: "if there are N tabs, there are n
      positions in the stack. they default in current order with skills
      at position 1. when one tab is hovered, it takes position 1, and
      all other tabs cascade down to take remaining positions. no tab can
@@ -1673,7 +1676,7 @@ const trayBoxStyles = (accentColor) => css`
      one without each box re-deriving its own fixed-right-edge math. This
      rule now only owns width/shape - no position/top/left of its own.
      Background is NOT changed here (2026-08-04, real regression fixed) -
-     per Ian: "clear tool bar here is no good." The first merged version
+     per the owner: "clear tool bar here is no good." The first merged version
      swapped the solid NERV_BG panel for a near-transparent orange tint on
      hover/open, which is what actually read as "clear"/washed-out - a
      real panel needs to stay a solid, opaque surface once it's holding
@@ -1684,7 +1687,7 @@ const trayBoxStyles = (accentColor) => css`
      as a floating panel.
 
      CLICK-ONLY now, no more hover-triggered open (2026-08-04, real bug) -
-     per Ian: "bug when skill tray is kinda sticky when it shouldnt. if u
+     per the owner: "bug when skill tray is kinda sticky when it shouldnt. if u
      click skill tray it should switch just between big mode and small
      mode." The old rule opened on BOTH hover and the is-open class -
      clicking while already hovering set is-open true on top of the hover
@@ -1692,7 +1695,7 @@ const trayBoxStyles = (accentColor) => css`
      the click) was still true, so the box stayed stuck open with no
      hover left to explain why. One trigger only now: toggleTray's
      is-open class, nothing else opens or closes this box. */
-  /* order: -1 (2026-08-10) - per Ian: "if clicked or expanded it will
+  /* order: -1 (2026-08-10) - per the owner: "if clicked or expanded it will
      move up to the top position... and then flip open and expand as is."
      trayColumn is a flex column; every tray-wrap defaults to the same
      order (0, unset), so they render in plain DOM order (Skill,
@@ -1707,9 +1710,9 @@ const trayBoxStyles = (accentColor) => css`
      animation phases in JS. Resets automatically the moment is-open is
      removed (mini-mode collapse via resetAllTrays, or closing this same
      tray) - no separate "last active order" state to track, matching
-     Ian's own call that the order should NOT persist across a
+     the owner's own call that the order should NOT persist across a
      mini-mode reset. */
-  /* z-index: 30 (2026-08-10, real bug fix) - per Ian: "clicking one
+  /* z-index: 30 (2026-08-10, real bug fix) - per the owner: "clicking one
      still shows two tabs as topmost... there should only ever be one
      tab that has topmost spot." order: -1 above only moves the OPEN
      tray to the front VISUALLY (flex order); z-index still came from
@@ -1728,7 +1731,7 @@ const trayBoxStyles = (accentColor) => css`
     width: 272px;
     border-radius: 10px 0 0 10px;
     /* border-color intentionally NOT bumped to full-opacity NERV_ORANGE
-       here anymore (2026-08-04) - per Ian: "outter lines of big mode
+       here anymore (2026-08-04) - per the owner: "outter lines of big mode
        skill tray are too thick." Same 1px width the whole time; what
        actually read as "thick" was the jump from NERV_LINE's translucent
        35% orange (the same weight every other border in this file uses -
@@ -1738,11 +1741,11 @@ const trayBoxStyles = (accentColor) => css`
     box-shadow: 0 4px 28px rgba(0, 0, 0, 0.5);
   }
 
-  /* Hazard-stripe texture, re-themed red (2026-08-04) - per Ian, sharing
+  /* Hazard-stripe texture, re-themed red (2026-08-04) - per the owner, sharing
      an Evangelion MAGI-terminal reference screenshot, then later: "match
      the theming here as much as possible" against a second reference
      showing the MAGI hex grid in red/black. First version kept this
-     stripe orange (matching the rest of the widget's palette) - Ian then
+     stripe orange (matching the rest of the widget's palette) - the owner then
      asked the tray's INTERIOR specifically to go red ("i dont like this
      orange for skill tray... interior objects and stuff here should be
      red"), keeping only the outer border + black background on the
@@ -1785,7 +1788,7 @@ const trayBoxStyles = (accentColor) => css`
 // `flex-direction: column` + `gap` is what makes a second tray
 // automatically stack below the first instead of needing its own
 // absolute top offset.
-// Sibling-hide (2026-08-06), per Ian's screenshot feedback: an inactive
+// Sibling-hide (2026-08-06), per the owner's screenshot feedback: an inactive
 // tray's own collapsed pill used to keep rendering directly below an OPEN
 // sibling panel - visually disconnected, "hanging" in empty space below
 // the open panel's own bottom edge instead of reading as part of the same
@@ -1799,7 +1802,7 @@ const trayBoxStyles = (accentColor) => css`
 // classes) correctly outranks `trayBoxStyles`'s own `.is-expanded &` rule
 // (2 classes) without `!important`, and reuses that same rule's already-
 // declared `opacity`/`transition` properties rather than redeclaring them.
-// Gap dropped from 8px to 0 (Ian: "they can also be right up next to each
+// Gap dropped from 8px to 0 (the owner: "they can also be right up next to each
 // other") - the two collapsed pills now sit flush when neither is open.
 // TRAY_STAGGER_OVERLAP (defined above, before trayBoxStyles, since that's
 // the first place it's used) pairs with the padding-top below to stagger
@@ -1814,7 +1817,7 @@ const trayColumn = css`
   align-items: flex-end;
   padding-top: ${TRAY_STAGGER_OVERLAP}px;
   pointer-events: none;
-  /* 2026-08-10, real bug fix - per Ian's screenshot: hovering Reports
+  /* 2026-08-10, real bug fix - per the owner's screenshot: hovering Reports
      Tray still showed Skill Tray drawn in front. Every tray-wrap child
      already gets its own stacking context from its transform (see
      trayBoxStyles), which should be enough for a plain z-index
@@ -1834,7 +1837,7 @@ const trayColumn = css`
 `
 
 // Content-hugging height now, not a fixed 168px (2026-08-04, real bug) -
-// per Ian, seeing the open panel live: "so much empty space here at the
+// per the owner, seeing the open panel live: "so much empty space here at the
 // top." The 168px figure was sized back when the label ran vertically
 // (rotated sideways down the collapsed pill's long edge) and needed that
 // much room; once the label went horizontal (see trayLabel's own
@@ -1855,7 +1858,7 @@ const trayHandleZone = css`
   padding: 14px 6px;
 `
 
-// Horizontal now, not rotated (2026-08-04) - per Ian: "skill tray should
+// Horizontal now, not rotated (2026-08-04) - per the owner: "skill tray should
 // be horizontal when in big mode." Wraps across two lines ("SKILL"/"TRAY")
 // inside the collapsed 84px-wide handle zone instead of running sideways
 // - normal reading orientation is more legible than rotated text was
@@ -1871,11 +1874,11 @@ const trayLabel = css`
   color: ${NERV_TEXT_DIM};
 `
 
-// Red now, not orange (2026-08-04) - per Ian: "match the theming here as
+// Red now, not orange (2026-08-04) - per the owner: "match the theming here as
 // much as possible" against the MAGI red/black hex reference, and
 // separately "interior objects and stuff here should be red" - the tray's
 // own border + black background stay on the widget's established
-// orange/black scheme (that's the part Ian said "we have worked"), but
+// orange/black scheme (that's the part the owner said "we have worked"), but
 // every accent INSIDE the tray switches to STATUS_RED.
 const trayCountStyles = (accentColor) => css`
   font-size: 12px;
@@ -1891,7 +1894,7 @@ const trayCountStyles = (accentColor) => css`
 // the second child in `trayBoxStyles`'s flex column, sharing the box's
 // background/border/width automatically since it's part of the same
 // element now.
-// align-items: start (2026-08-10, real bug fix) - per Ian: "it has the
+// align-items: start (2026-08-10, real bug fix) - per the owner: "it has the
 // scroll bar and scrolls to dead space with a small number of reports."
 // CSS Grid items default to align-items: stretch, so trayListInner (the
 // sole item in this grid's row) was being force-stretched to fill
@@ -1911,7 +1914,7 @@ const trayListGrid = css`
 `
 
 // overflow-y defaults to hidden, not auto (2026-08-10, real bug fix) -
-// per Ian: "theres no scroll bar but it still scrolls. can we have it
+// per the owner: "theres no scroll bar but it still scrolls. can we have it
 // stay in space and if there are enough new reports then it scrolls
 // with scroll bar." An always-on overflow-y: auto lets a short list
 // still take scroll-gesture input even with nothing real to scroll
@@ -1932,7 +1935,7 @@ const trayListGrid = css`
 // accentColor) sidesteps the ordering issue entirely without relocating
 // HEX_H/HEX_W and the comments already anchored to their position.
 // No min-height for the active-hex case anymore (2026-08-10, real bug
-// fix, round 3) - per Ian: "it should expand when clicked but doesnt
+// fix, round 3) - per the owner: "it should expand when clicked but doesnt
 // need to scroll unless there are more than 9 reports... there is no
 // purpose or utility in scrolling when u can view them all." A forced
 // min-height: 420px (the previous two attempts) reserved that much room
@@ -1964,7 +1967,7 @@ const trayListInner = () => css`
     border-radius: 2px;
   }
 
-  /* Fade the bottom edge instead of a hard clip (2026-08-10) - per Ian's
+  /* Fade the bottom edge instead of a hard clip (2026-08-10) - per the owner's
      screenshot of the reading view: "i dont exactly like the way it cuts
      off so close to the border." A flat overflow clip ends mid-line with
      no visual cue there's more below; masking the last ~28px to
@@ -1991,7 +1994,7 @@ const formatSkillLastUsed = (hoursAgo) => {
   return `used ${Math.round(hoursAgo / 24)}d ago`
 }
 
-// formatUpdatedRecency (2026-08-05) - per Ian: "provide... latest update"
+// formatUpdatedRecency (2026-08-05) - per the owner: "provide... latest update"
 // as one of the overlay's little-header sections. Mirrors
 // formatSkillLastUsed's own age-bucketing (mirrors how humans actually
 // talk about recency: hours/days) but reads from SKILL.md's own mtime
@@ -2004,9 +2007,9 @@ const formatUpdatedRecency = (hoursAgo) => {
   return `${Math.round(hoursAgo / 24)}d ago`
 }
 
-// formatSkillCounts (2026-08-04) - per Ian: "we need to make sure these
+// formatSkillCounts (2026-08-04) - per the owner: "we need to make sure these
 // are all distinguished [manual vs auto-executed]." A single undifferentiated
-// number used to hide whether a skill's calls came from Ian asking
+// number used to hide whether a skill's calls came from the owner asking
 // directly or from a scheduled task/another skill invoking it - this
 // spells both out when either is present, e.g. "2 manual · 1 auto",
 // falling back to just whichever one is non-zero if only one kind has
@@ -2019,7 +2022,7 @@ const formatSkillCounts = (skill) => {
   return `${manual} manual · `
 }
 
-// skillOverlaySection / overlayLabelStyles (2026-08-05) - per Ian: "we can
+// skillOverlaySection / overlayLabelStyles (2026-08-05) - per the owner: "we can
 // provide summary, number of times used, if its used by other skills,
 // latest update and these can have little headers... this doesnt need to
 // be expandable." Same visual shape as `detailLabel` (uppercase, small,
@@ -2060,7 +2063,7 @@ const skillOverlayBody = css`
 
 // Reports Tray hex-overlay bullet styles (2026-08-07) - kept from the
 // original panel-based port (2026-08-06) when the tray was rebuilt as hex
-// tiles matching Skill/Script Tray's own format, per Ian: "sorry needs to
+// tiles matching Skill/Script Tray's own format, per the owner: "sorry needs to
 // be hex format like the others." These two list-item treatments (dash
 // bullet vs "!" attention bullet) are genuinely distinct from the shared
 // skillOverlayBody/skillOverlaySection styles the hex overlay otherwise
@@ -2122,7 +2125,7 @@ const reportsMoreNote = css`
 `
 
 // Hex grid (2026-08-04), replaced the plain row list, then reworked again
-// the same day - per Ian, sharing two MAGI-terminal reference images:
+// the same day - per the owner, sharing two MAGI-terminal reference images:
 // first "could skills populate in big mode like this with the hexagonal
 // pattern... hovering over them makes the skill summary and info readout
 // overlay on the big mode readout of just the skill tray," then live
@@ -2132,7 +2135,7 @@ const reportsMoreNote = css`
 // between them... match the theming here as much as possible."
 //
 // FLAT-TOP orientation (2026-08-04, real reorientation, not just styling) -
-// per Ian, looking at the live pointy-top version next to the same
+// per the owner, looking at the live pointy-top version next to the same
 // reference image again: "it should be flat at the top the hexagons need
 // to be rotated." Pointy-top hexagons (a vertex at top-center/bottom-
 // center) is what every earlier round of this section built - flat-top
@@ -2158,7 +2161,7 @@ const reportsMoreNote = css`
 //     drifts by a couple px per hex).
 //   - Each hex keeps its own full border; two touching hexes' borders sit
 //     right next to each other, reading as one thicker shared line - the
-//     "thick borders between them" Ian asked for, not a separate seam
+//     "thick borders between them" the owner asked for, not a separate seam
 //     hack.
 //
 // Used/never-run now reads as FILLED vs OUTLINE, not just a dim vs. bright
@@ -2170,7 +2173,7 @@ const reportsMoreNote = css`
 // legible visual home than a small colored number did.
 //
 // Selection is click-driven now, not hover (2026-08-04, real bug) - per
-// Ian: "when you hover over them they are not legible at all... until you
+// the owner: "when you hover over them they are not legible at all... until you
 // click it, or if you leave the skill tray it just resets." The old
 // `&:hover .hex-overlay` rule is what produced the illegible, half-
 // rendered flicker in his screenshot (crossing from a tiny hex onto its
@@ -2208,7 +2211,7 @@ const reportsMoreNote = css`
 // overlay skips past it and binds to this wrap instead, covering the
 // whole grid rather than just its own cell.
 //
-// This is also the pre-planned slot system Ian asked for ("preplan a grid
+// This is also the pre-planned slot system the owner asked for ("preplan a grid
 // layout system for skills to slot in when we add more, it should be easy
 // to add a new skill into the next one") - `chunkIntoColumns` just
 // walks the skills list in fixed-size chunks of `SKILL_HEX_COL_SIZE`; a
@@ -2219,7 +2222,7 @@ const reportsMoreNote = css`
 // width is now the LONGER dimension (a regular flat-top hexagon has
 // width = height * 2/sqrt(3), the inverse of pointy-top's ratio), so W/H
 // swap along with the shape itself.
-// Sized up twice now (2026-08-05): 78x68 -> 90x78, per Ian: "can we size
+// Sized up twice now (2026-08-05): 78x68 -> 90x78, per the owner: "can we size
 // up the size of all the hexagons a little bit," then -> 94x82, per his
 // direct follow-up: "maybe just a little bigger for the sake of size and
 // eating up some empty space without needing to scroll or go outside the
@@ -2229,9 +2232,9 @@ const reportsMoreNote = css`
 // hexWrap's 8px of horizontal padding); 3 columns at this size take
 // 94 + 2 * (94 * 0.75) = 235px, about as large as fits with a small
 // margin before actually needing to widen the tray box itself (that's
-// the "yet" in Ian's own phrasing - a real next step if he wants bigger
+// the "yet" in the owner's own phrasing - a real next step if he wants bigger
 // still, not attempted here).
-// SKILLS_TRAY_HEX_ROW_MAX_WIDTH (2026-08-05) - per Ian, after a screenshot
+// SKILLS_TRAY_HEX_ROW_MAX_WIDTH (2026-08-05) - per the owner, after a screenshot
 // caught the hex grid's 4th column bleeding straight past the tray's own
 // right edge into the widget next to it: "can we make a check for styling
 // to make sure that never happens or is avoided?" This is the single
@@ -2252,7 +2255,7 @@ const SKILLS_TRAY_HEX_ROW_MAX_WIDTH = 242
 const HEX_W = 94
 const HEX_H = 82
 
-// TRAY_LIST_MAX_ROWS (2026-08-10, lowered 2026-08-11) - per Ian's
+// TRAY_LIST_MAX_ROWS (2026-08-10, lowered 2026-08-11) - per the owner's
 // original ask: "if reports is 3 or less, no scroll bar and fixed box
 // until a report is clicked. Otherwise expand box height appropriate
 // amount for every new row of 3 until rows are >9 then use a scroll
@@ -2260,7 +2263,7 @@ const HEX_H = 82
 // then scroll past a cap" for free - the only piece actually needed was
 // picking the right cap. 9 rows (27 items) turned out to be far more
 // than it looked like on paper - seeing 13 real items (5 rows) rendered
-// live, Ian's own call was "if there are this many logs it should have
+// live, the owner's own call was "if there are this many logs it should have
 // a scroll bar," meaning 5 rows was already too tall. Lowered to 4 (12
 // items) based on that direct feedback against the real render, not
 // picked in the abstract like the original 9 was.
@@ -2279,7 +2282,7 @@ const TRAY_LIST_MAX_ROWS = 4
 // has-overflow a hair early.
 const TRAY_LIST_MAX_HEIGHT = TRAY_LIST_MAX_ROWS * HEX_H + HEX_H / 2 + 12 + 10 + 4
 
-// READING_MAX_HEIGHT (2026-08-10) - per Ian, once the box-ballooning bug
+// READING_MAX_HEIGHT (2026-08-10) - per the owner, once the box-ballooning bug
 // was actually fixed: "this is better but still kinda ugly... i think
 // its ok to have a scroll bar when report is selected." A single open
 // report doesn't need the same 9-row browsing allowance
@@ -2289,12 +2292,12 @@ const TRAY_LIST_MAX_HEIGHT = TRAY_LIST_MAX_ROWS * HEX_H + HEX_H / 2 + 12 + 10 + 
 // disproportionately tall. A comfortable reading height (this file's
 // original figure for this exact purpose, before the 9-row work
 // widened it) with real scrolling for anything longer - now explicitly
-// fine per Ian - reads better than one shared number trying to serve
+// fine per the owner - reads better than one shared number trying to serve
 // both jobs.
 const READING_MAX_HEIGHT = 420
 
 // FIXED column count, growth now goes DOWN not RIGHT (2026-08-05, real
-// bug found live via screenshot) - per Ian: "wrong spot to add... if we
+// bug found live via screenshot) - per the owner: "wrong spot to add... if we
 // build out to ~4ish staggered hexagons wide, the size of the hexagons
 // should be decreased. additionally if thats the case, lets first see
 // what that looks like and rearrange them so new hex's get added to the
@@ -2307,7 +2310,7 @@ const READING_MAX_HEIGHT = 420
 // row`, no wrap, no width cap) just kept extending the grid rightward with
 // each new column - straight past `trayBoxStyles`'s own fixed 272px open
 // width, with the 4th column's hexes (`tutor`, `log-rollup`) visibly
-// clipped by the panel's real edge in Ian's screenshot. The tray's
+// clipped by the panel's real edge in the owner's screenshot. The tray's
 // vertical scroll (`trayListInner`'s max-height cap, which the whole hex
 // grid already renders inside of and only switches on overflow-y once
 // content genuinely overflows it) was sitting right there unused the
@@ -2315,13 +2318,13 @@ const READING_MAX_HEIGHT = 420
 // in the one axis that ISN'T scrollable instead of the one that is.
 //
 // Fix: `SKILL_HEX_COLUMNS` is now the column COUNT (fixed at 3, matching
-// the width Ian already approved and tuned this hex size against - see
+// the width the owner already approved and tuned this hex size against - see
 // the sizing comment above), not a per-column skill limit. New skills
 // round-robin into whichever column comes next (`i % SKILL_HEX_COLUMNS`)
 // instead of opening a new column - so the grid's WIDTH never changes as
 // skills are added, only each column's HEIGHT does, which is exactly "new
 // hexes get added to the bottom" and lands inside the scroll container
-// that already exists for it. Going to 4 columns wide (Ian's other ask,
+// that already exists for it. Going to 4 columns wide (the owner's other ask,
 // still open) is a real, deliberate widening + hex-size-down decision to
 // make separately, not something that should ever happen as a silent
 // side effect of the skill count crossing a multiple of 3 again.
@@ -2343,7 +2346,7 @@ const HEX_FILL_TEXT = "#0a0908"
 // backlog across different columns, breaking the "oldest unread stacks
 // at the top of its own column" behavior Reports Tray needs.
 // serpentine (2026-08-10) - third optional fill mode, added for Reports
-// Tray v2 per Ian: "i dont think we need columns organized by their log
+// Tray v2 per the owner: "i dont think we need columns organized by their log
 // they can just be arranged in serpentine fashion in this general
 // chronological order... the row of read reports going from left to
 // right and then down in reverse." Replaces Reports Tray's own use of
@@ -2390,7 +2393,7 @@ const chunkIntoColumns = (items, groupKey, serpentine) => {
   return columns
 }
 
-// Solid rectangular background REMOVED again (2026-08-04) - per Ian,
+// Solid rectangular background REMOVED again (2026-08-04) - per the owner,
 // looking at the now-tightly-tiled flat-top grid: "remove back square
 // background here." It was added in an earlier round to stop the
 // hazard-stripe texture from bleeding through the small gaps between
@@ -2405,7 +2408,7 @@ const hexWrap = css`
   position: relative;
   padding: 2px 4px 10px 4px;
 
-  /* 2026-08-10, real bug fix - per Ian's screenshot: an open report
+  /* 2026-08-10, real bug fix - per the owner's screenshot: an open report
      overlay is sized to its own content (see hexOverlayStyles), which
      can end up shorter than hexWrap's own honeycomb height - a
      column-offset sibling hex (the ":nth-of-type(even) margin-top"
@@ -2442,7 +2445,7 @@ const hexWrap = css`
 // COLUMNS out left-to-right; each column itself stacks its hexes
 // top-to-bottom. See the flat-top reorientation comment above for why the
 // row/column roles swapped along with the hexagon shape.
-// justify-content: center added (2026-08-04) - per Ian: "can u get it
+// justify-content: center added (2026-08-04) - per the owner: "can u get it
 // centered more in the tab." The grid's actual content width (three
 // overlapping columns) is narrower than the tray's available width, and
 // with no justify-content set the row defaulted to flex-start, packing
@@ -2487,7 +2490,7 @@ const hexCell = css`
 `
 
 // Two-layer outline/fill split (2026-08-04, real bug found live) - per
-// Ian: "can the hex have slight red outline" - looking at the last
+// the owner: "can the hex have slight red outline" - looking at the last
 // screenshot, only the flat top/bottom edges of each unfilled hex showed
 // any visible border at all; the four slanted edges were essentially
 // invisible. Root cause: `border` + `clip-path` on the SAME element is a
@@ -2508,7 +2511,7 @@ const hexCell = css`
 // STATUS_RED again for a used skill (reads as fully solid, exactly like
 // the reference's solid cells, since outline and fill match), or NERV_BG
 // for a never-run one (the red outer layer shows through as a crisp,
-// uniform ring all the way around - the actual "slight red outline" Ian
+// uniform ring all the way around - the actual "slight red outline" the owner
 // asked for, working on every edge, not just the flat ones).
 const hexOutlineStyles = (accentColor) => css`
   width: 100%;
@@ -2539,7 +2542,7 @@ const hexFill = css`
 `
 
 // Triangle glyphs replacing the plain call-count digit (2026-08-04) - per
-// Ian, pointing directly at the MAGI reference image's own hex content:
+// the owner, pointing directly at the MAGI reference image's own hex content:
 // "i want it to look like this." That image flanks each cell's label with
 // a solid up-triangle above and down-triangle below, not a number - real
 // call-count data still lives one click away in the overlay
@@ -2552,7 +2555,7 @@ const hexTriangle = css`
 `
 
 // Wraps onto multiple lines now instead of truncating with an ellipsis
-// (2026-08-04, real bug) - per Ian: "have full displaced skill text if it
+// (2026-08-04, real bug) - per the owner: "have full displaced skill text if it
 // needs new line in the hex no overlap." A flat-top hex has full usable
 // width across its vertical middle, and the vertical stack here (two
 // triangles + this label) only uses roughly half the hex's own height
@@ -2580,7 +2583,7 @@ const hexLabel = css`
 `
 
 // hexSubtitle (2026-08-10) - optional small second line under a hex's main
-// label, per Ian's screenshot feedback on Reports Tray: with several
+// label, per the owner's screenshot feedback on Reports Tray: with several
 // stacked instances of the same source (e.g. five morning-report hexes), the
 // face alone couldn't tell them apart without opening each one. Generic
 // on HexTile (below), not Reports-specific - Skill Tray/Script Tray items
@@ -2773,10 +2776,10 @@ const HexGrid = ({ items, accentColor, fillPredicate, renderOverlayBody, onTileS
 // pulls it outside cardOuter's normal rendered box/hit region (native
 // mouseenter/mouseleave key off an element's actual geometry, not just
 // DOM parent-child structure). So this still directly calls
-// disarmCollapse/armCollapse on the captured `cardNode` - per Ian: "when
+// disarmCollapse/armCollapse on the captured `cardNode` - per the owner: "when
 // this flips out... that now needs to register as true since the tracker
 // size has expanded."
-// onMouseLeave also resets any active hex overlay (2026-08-04) - per Ian:
+// onMouseLeave also resets any active hex overlay (2026-08-04) - per the owner:
 // "if you leave the skill tray it just resets." Same handler, just one
 // more call alongside the existing armCollapse.
 const Tray = ({ id, accentColor, label, count, children }) => {
@@ -2812,7 +2815,7 @@ const Tray = ({ id, accentColor, label, count, children }) => {
   )
 }
 
-// 2026-07-31: Ian - "seeing everything expanded at once is a little
+// 2026-07-31: the owner - "seeing everything expanded at once is a little
 // jarring" - the summary line gets a slight bold/brightness lift so the eye
 // has one clear thing to land on first when a detail panel opens, rather
 // than every line reading with equal weight.
@@ -2849,11 +2852,11 @@ const clickableCursor = css`
 // rounds of a git-flow-style connector - static border ticks, a border-
 // radius "arc" box, a hand-drawn SVG path that drew itself on hover, then a
 // single cursor-tracking dot that followed the mouse and "docked" onto the
-// nearest row. Ian's call after living with it: "remove the moving ball/
+// nearest row. The owner's call after living with it: "remove the moving ball/
 // line/gitflow arc aesthetic thing, it just isn't working." Pulled the
 // whole connector/tracking-dot mechanism out rather than tuning it a
 // seventh time - plain rows, full-bleed hover tint (the "highlight the
-// whole bar like a dropdown menu" read Ian liked much earlier), still
+// whole bar like a dropdown menu" read the owner liked much earlier), still
 // click-to-copy a continue-work prompt. Nothing about the click behavior
 // changed, only the connector visuals are gone.
 const stepsWrap = css`
@@ -2888,7 +2891,7 @@ const detailLabel = css`
   letter-spacing: 0.08em;
 `
 
-// Subsub-headers (2026-07-31), per Ian: "summary last completed next steps
+// Subsub-headers (2026-07-31), per the owner: "summary last completed next steps
 // time estimate these should all be collapsed and expandable children on
 // hover too" - the same restructure just built for Needs Attention groups,
 // applied one level deeper to each project's own detail fields. Each field
@@ -2917,20 +2920,20 @@ const SubField = ({ label, children }) => (
   </div>
 )
 
-// `color` added to each entry (2026-07-31, per Ian: "just want to test out"
+// `color` added to each entry (2026-07-31, per the owner: "just want to test out"
 // each project row highlighting in its own section's color on hover - the
 // same color each section's icon already uses, so this isn't a new palette
 // decision, just reusing what's already established). Done's "green" is
-// STATUS_TEAL - the closest already-established color to what Ian described,
+// STATUS_TEAL - the closest already-established color to what the owner described,
 // since IconDone has used teal (not a second pure green) since the icon set
 // was built; flagging this rather than silently guessing he meant something
 // else. Dormant gets NERV_TEXT_DIM (its own icon's color) for consistency,
-// even though Ian's list didn't explicitly name it.
+// even though the owner's list didn't explicitly name it.
 const SECTION_META = {
   active: { Icon: IconActive, label: "Active", color: STATUS_GREEN },
   idea: { Icon: IconIdea, label: "Idea", color: NERV_AMBER },
   paused: { Icon: IconPaused, label: "Paused", color: STATUS_BLUE },
-  // Real status, added 2026-07-31 (Ian: "we still need a backlog section here
+  // Real status, added 2026-07-31 (the owner: "we still need a backlog section here
   // too") - the structural piece only: a real INDEX.md status key a project
   // can be tagged with, its own section here, sorted most-recently-touched
   // like Active/Paused/Done. What's NOT built yet is the automated lifecycle
@@ -2944,7 +2947,7 @@ const SECTION_META = {
   done: { Icon: IconDone, label: "Done", color: STATUS_TEAL },
   // Not a real status (see status_summary.py's collect_stale_projects) - every
   // project flagged stale anywhere else, surfaced as its own subheader
-  // (2026-07-31, per Ian: wanted this listed as a subheader alongside the
+  // (2026-07-31, per the owner: wanted this listed as a subheader alongside the
   // real statuses, not buried as plain text inside Needs Attention).
   dormant: { Icon: IconDormant, label: "Dormant", color: NERV_TEXT_DIM },
   // Also not a real INDEX.md status (2026-08-04) - reads from _bin/BIN.md
@@ -3003,7 +3006,7 @@ const REPORTS_BULLET_CAP = 3
 // mid-word inside hexLabel's 50px box ("IANLOGG"/"ER"). "MORNING REPORT"
 // never had this problem: it already wraps cleanly at the space between
 // two real words. The first fix over-corrected to bare single-word labels
-// ("LOG"/"REPORT"/"AUDIT") that lost the source identity - per Ian, "i
+// ("LOG"/"REPORT"/"AUDIT") that lost the source identity - per the owner, "i
 // should know what log it is." Real fix: keep labels descriptive, just
 // make sure every individual word is short enough (roughly <=7-8 chars at
 // this box width/font) to fit its own line without needing a mid-word
@@ -3031,11 +3034,11 @@ const formatHexDate = (id) => (id && id.length >= 10 ? id.slice(5) : id)
 // needs) and `id` (the instance's own date) alongside the usual
 // `key`/`kind`/`name`/`data` shape every other hex item in this file
 // already uses. `subtitle` is the compact-date second face line (see
-// hexSubtitle/HexTile) - per Ian, several stacked same-source hexes (e.g.
+// hexSubtitle/HexTile) - per the owner, several stacked same-source hexes (e.g.
 // five morning-report hexes) were indistinguishable from the outside without
 // opening each one.
 //
-// Final sort by `id` (2026-08-10) - per Ian: "i dont think we need
+// Final sort by `id` (2026-08-10) - per the owner: "i dont think we need
 // columns organized by their log they can just be arranged in serpentine
 // fashion in this general chronological order." The per-source grouping
 // this used to rely on (still available as `chunkIntoColumns`'s
@@ -3114,16 +3117,15 @@ const renderReportOverlayBody = (item, accentColor) => {
 // handler for this tray. Shells out via Übersicht's run() the same way
 // copyPrompt already does for copy-to-clipboard - not a new interaction
 // pattern for this file. No-ops for an already-viewed item (nothing to
-// mark). Absolute paths, same convention CLAUDE_SPACE_FOLDER and this
-// widget's own `command` export already use throughout this file - this
-// is a personal, single-user widget, not meant to be portable.
-const REPORTS_VIEWED_CONFIG_PATH = "/Users/ianerickson/Desktop/Projects/dashboard-visualizer/config/reports_viewed.json"
-const MARK_REPORT_VIEWED_SCRIPT_PATH = "/Users/ianerickson/Desktop/Projects/dashboard-visualizer/scripts/mark_report_viewed.py"
+// mark). Paths are built from ../src/paths.config.js, same as this
+// widget's own `command` export.
+const REPORTS_VIEWED_CONFIG_PATH = `${REPO_DIR}/config/reports_viewed.json`
+const MARK_REPORT_VIEWED_SCRIPT_PATH = `${REPO_DIR}/scripts/mark_report_viewed.py`
 
 const markReportViewed = (item) => {
   if (item.viewed) return
   run(
-    `python3 '${MARK_REPORT_VIEWED_SCRIPT_PATH}' --config '${REPORTS_VIEWED_CONFIG_PATH}' --source '${item.reportSource}' --id '${item.id}'`
+    `python3 "${MARK_REPORT_VIEWED_SCRIPT_PATH}" --config "${REPORTS_VIEWED_CONFIG_PATH}" --source '${item.reportSource}' --id '${item.id}'`
   ).catch(() => {})
 }
 
@@ -3146,17 +3148,17 @@ const formatResetCountdown = (daysLeft, hoursLeft) => {
   return `${daysLeft}d ${hoursLeft}h`
 }
 
-// formatHealthGauge / resetHealthTimer (2026-07-31, per Ian: "another timer
+// formatHealthGauge / resetHealthTimer (2026-07-31, per the owner: "another timer
 // bar that I want to monitor here is personal health bar that monitors time
 // since last break and counts down from an hour... tie this to the mental
 // and personal health check stuff" - i.e. wellbeing-check). Mirrors
 // formatSessionReset's short-value convention; clicking the gauge marks a
 // break taken right now (writes a fresh last_break_at to
 // config/last_break.json via `run`, same base64-safe echo pattern
-// copyPrompt already uses for pbcopy) so the countdown is something Ian
+// copyPrompt already uses for pbcopy) so the countdown is something the owner
 // actually resets in the moment, not a display-only number that silently
 // goes stale like session_reset can.
-// "away" branch added (2026-08-02), per Ian: "change the icon to a little
+// "away" branch added (2026-08-02), per the owner: "change the icon to a little
 // z's or sleeping to signify I am away... I don't want it to be in the
 // 'needs a break' when I just am inactive or away." status_summary.py
 // already forces overdue: false while away (see load_personal_health's own
@@ -3171,13 +3173,13 @@ const formatHealthGauge = (health) => {
   return h > 0 ? `~${h}h ${m}m` : `~${m}m`
 }
 
-const LAST_BREAK_CONFIG_PATH = "/Users/ianerickson/Desktop/Projects/dashboard-visualizer/config/last_break.json"
+const LAST_BREAK_CONFIG_PATH = `${REPO_DIR}/config/last_break.json`
 
 // healthHueColor (2026-07-31) - same green(120)->red(0) HSL sweep the big
 // gauge's own fill uses (see resetGaugeFill/ResetGauge's comment), factored
 // out here so the mini-mode pill icon below can match it exactly instead of
 // re-deriving its own color logic. "away" branch added (2026-08-02): the
-// green->red urgency sweep isn't meaningful while Ian's genuinely away (the
+// green->red urgency sweep isn't meaningful while the owner's genuinely away (the
 // countdown is frozen, not real pressure), so away gets its own calm, fixed
 // color instead of wherever the frozen fraction happens to land on the hue
 // sweep - same blue IconPaused already uses elsewhere in this file, since
@@ -3191,14 +3193,14 @@ const healthHueColor = (health) => {
   return `hsl(${hue}, 85%, 55%)`
 }
 
-// Root-cause bug fix (2026-08-02), per Ian: clicking multiple times was
+// Root-cause bug fix (2026-08-02), per the owner: clicking multiple times was
 // stacking ~60m per click (observed: 360m after several clicks). Real cause
 // wasn't the click handler stacking anything - `toISOString()` returns UTC
-// ("...T01:07:26" while Ian's actual local time was 20:07 CDT, a 5-hour
+// ("...T01:07:26" while the owner's actual local time was 20:07 CDT, a 5-hour
 // gap), but status_summary.py's load_personal_health parses last_break_at
 // as NAIVE LOCAL time (datetime.now(), no tz) - same convention
 // session_reset.json already uses. Every click wrote a UTC timestamp that
-// read as ~5 hours in Ian's own future once Python compared it against
+// read as ~5 hours in the owner's own future once Python compared it against
 // local "now," so minutes_left came out as 60 + that offset (~360m) - and
 // because each click re-derives "now" independently, re-clicking didn't
 // cleanly reset to 60, it just recomputed a similarly-inflated number,
@@ -3227,7 +3229,7 @@ const resetHealthTimer = () => {
 const formatSessionReset = (session) => {
   if (!session) return null
   // 2026-07-31: was a long "unknown (last reported...)" string crammed into the
-  // value slot - Ian flagged it as unhelpful clutter. Short value here, the
+  // value slot - the owner flagged it as unhelpful clutter. Short value here, the
   // fuller explanation lives in the separate .resetStale line below it.
   if (session.already_passed) return "stale"
   const h = Math.floor(session.minutes_left / 60)
@@ -3235,7 +3237,7 @@ const formatSessionReset = (session) => {
   return h > 0 ? `~${h}h ${m}m` : `~${m}m`
 }
 
-// NERV/MAGI-style depleting gauges (2026-07-31, per Ian, two rounds of
+// NERV/MAGI-style depleting gauges (2026-07-31, per the owner, two rounds of
 // feedback in a row: first "I don't need rolling/approximate... I'd love a
 // little time bar that ticks down in the NERV MAGI computer aesthetic," then
 // live on seeing it - "not clear which is which" between Session and Weekly
@@ -3256,7 +3258,7 @@ const resetGaugeTrack = css`
   position: relative;
   width: 100%;
   height: 7px;
-  /* Second alignment nudge (2026-07-31, per Ian, live: "still a little higher
+  /* Second alignment nudge (2026-07-31, per the owner, live: "still a little higher
      than their corresponding session thing... shouldn't be above the font of
      the session lettering"). flex-start lines up the two columns' boxes, but
      text has its own line-height padding above the glyphs themselves, so the
@@ -3269,7 +3271,7 @@ const resetGaugeTrack = css`
   overflow: hidden;
 `
 
-// Color-coded by time remaining (2026-07-31), per Ian: "slight coloring for
+// Color-coded by time remaining (2026-07-31), per the owner: "slight coloring for
 // the time elapse bars - they should start green when closer to full and go
 // green yellow orange red when close to end." The gauge's own colors were
 // fixed (orange/amber) regardless of how much time was actually left - now
@@ -3279,7 +3281,7 @@ const resetGaugeTrack = css`
 // - the segmented/blocky MAGI-style fill pattern itself is unchanged, just
 // which color it's drawn in. A hue sweep naturally passes through yellow
 // (~60) around the midpoint and orange (~30) approaching empty, matching the
-// green -> yellow -> orange -> red sequence Ian described without needing
+// green -> yellow -> orange -> red sequence the owner described without needing
 // four hardcoded threshold colors.
 const resetGaugeFill = css`
   position: absolute;
@@ -3303,7 +3305,7 @@ const resetGaugeFill = css`
 // staleText / onClick (2026-07-31, added for the personal-health gauge
 // below): both optional so Session/Weekly usage - the two existing callers -
 // render exactly as before (default stale message, no click affordance).
-// Stale message moved inline (2026-08-04), per Ian: "keep them same spacing
+// Stale message moved inline (2026-08-04), per the owner: "keep them same spacing
 // on all the bars... maybe have it inline next to the time." Now rendered
 // INSIDE resetValueRight, right after valueText on the same line, instead of
 // as a second block-level line below it - resetBarCol is always exactly
@@ -3339,10 +3341,10 @@ const ResetGauge = ({ label, valueText, remainingFraction, stale, staleText, onC
   )
 }
 
-// isIdea (2026-07-31, per Ian: "make it so clicking an idea triggers incubator
+// isIdea (2026-07-31, per the owner: "make it so clicking an idea triggers incubator
 // skill so if I want to build an idea I can click and we start incubating").
 //
-// Revised same day, per Ian's direct feedback on the first version: no
+// Revised same day, per the owner's direct feedback on the first version: no
 // separate "Incubate this idea →" row with an arrow - "the whole expanded
 // item should just be clickable... I don't always need instructions
 // implemented in a design, I like that we're designing some stuff to be
@@ -3352,7 +3354,7 @@ const ResetGauge = ({ label, valueText, remainingFraction, stale, staleText, onC
 // below: dropped the "(click to start)" parenthetical off the Next Steps
 // label - the hover color shift on each step already says "this is
 // clickable" without a caption spelling it out.
-// isPaused (2026-07-31, per Ian: "for the pause you should be able to click
+// isPaused (2026-07-31, per the owner: "for the pause you should be able to click
 // it and it will add it either to active or idea depending on whats
 // paused"). Same click-to-copy-a-prompt pattern as isIdea's incubate handler
 // above, not a direct file mutation - consistent with every other click in
@@ -3454,23 +3456,23 @@ const ProjectRow = ({ item, isIdea, isPaused, color }) => {
 }
 
 // 2026-07-31: Done used to be a special case - only its 3 most recent items,
-// no way to see the rest. Per Ian ("everything in tiny mode should be
+// no way to see the rest. Per the owner ("everything in tiny mode should be
 // expandable and viewable in big mode"), unified it with Idea's pattern:
 // every section (including Done) shows its FULL list, collapsible sections
 // just default to only the header until hovered. `section.shown` is already
 // the complete list for every status - status_summary.py stopped truncating
 // it back in the earlier scrolling fix.
 //
-// Empty sections (2026-07-31, per Ian: "for every item in tiny mode I want
+// Empty sections (2026-07-31, per the owner: "for every item in tiny mode I want
 // to see a subsection in big mode even if there's nothing and it doesn't
 // expand"): the header always renders now, even at 0 - only the hover-expand
 // behavior (and the list itself) is skipped when there's nothing to show, so
 // an empty section just sits there as a flat, non-interactive line instead
 // of disappearing.
-// recentCount (2026-07-31, per Ian - the "Done count is often just 0"
+// recentCount (2026-07-31, per the owner - the "Done count is often just 0"
 // question, answered): Done specifically also shows how many were marked
 // done in the last 2 weeks next to the plain lifetime total, so big mode
-// carries both numbers Ian asked for ("total done and then done recently") -
+// carries both numbers the owner asked for ("total done and then done recently") -
 // tiny mode shows only the recent count (see render()'s tinyRow).
 const Section = ({ statusKey, section, collapsible, recentCount }) => {
   const meta = SECTION_META[statusKey]
@@ -3502,7 +3504,7 @@ const Section = ({ statusKey, section, collapsible, recentCount }) => {
         <span className={sectionHeaderLabel}><meta.Icon /> {meta.label}</span>
         <span className={sectionHeaderCount}>{total}</span>
       </div>
-      {/* Alignment fix (2026-07-31, per Ian: "the orange numbers all need to
+      {/* Alignment fix (2026-07-31, per the owner: "the orange numbers all need to
           align... for done that should be total items, maybe grey note that
           N done recently, don't need the specific two weeks part"). The count
           above is the plain total again, same as every other section - right
@@ -3518,7 +3520,7 @@ const Section = ({ statusKey, section, collapsible, recentCount }) => {
 }
 
 // DailyGoals (2026-08-04) - the goal-for-day panel restyled from a single
-// bold-orange line into a real Section, per Ian: "can the goal for the day
+// bold-orange line into a real Section, per the owner: "can the goal for the day
 // be a list as well and have daily goals as a header... more readable...
 // also daily goals should be another thing that is collapsable/expandable.
 // most new implementations to command space should follow this pattern
@@ -3527,7 +3529,7 @@ const Section = ({ statusKey, section, collapsible, recentCount }) => {
 // collapsibleSection/nestedList/nestedInner/scrollList for the hover-reveal
 // list) rather than introducing a second visual language - this is now the
 // go-to shape for anything new added to Commandspace, not a one-off.
-// Row-level treatment revised same day, per Ian's direct follow-up: "have
+// Row-level treatment revised same day, per the owner's direct follow-up: "have
 // it match the style of the other collapseabile sections and have brief
 // summary that can be explandable and have it clickable so that i can
 // work on it in a new thread" - see GoalRow (near AttentionEntryRow below)
@@ -3537,7 +3539,7 @@ const DailyGoals = ({ dailyGoal }) => {
   const rawGoals = dailyGoal && dailyGoal.goals ? dailyGoal.goals : []
   if (!dailyGoal || rawGoals.length === 0) return null
 
-  // Per-item completion + reorder (2026-08-04 follow-up), per Ian: "when a
+  // Per-item completion + reorder (2026-08-04 follow-up), per the owner: "when a
   // goal's real item gets completed the goal can remain for the day but
   // have strike thru and move to the bottom of the daily goals." Each goal
   // now carries its own `completed` (see status_summary.py's
@@ -3549,7 +3551,7 @@ const DailyGoals = ({ dailyGoal }) => {
   // not a shrinking list.
   const goals = [...rawGoals].sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0))
   // Header count bumps down as items complete (2026-08-04 follow-up), per
-  // Ian: "when a goal is completed it the daily goal count should bump
+  // the owner: "when a goal is completed it the daily goal count should bump
   // down." Was `goals.length` (static total) - now the count of what's
   // still actually open, same "this number should move as real progress
   // happens" spirit as needs_ian_count elsewhere in this file.
@@ -3575,7 +3577,7 @@ const DailyGoals = ({ dailyGoal }) => {
 // 2026-07-31: this section's header now carries the count itself
 // (needsIanCount, the real uncapped total) - there used to be a SEPARATE
 // "N waiting on you" line elsewhere in big mode pulling from the exact same
-// underlying data, which Ian correctly flagged as redundant ("what's the
+// underlying data, which the owner correctly flagged as redundant ("what's the
 // difference?"). That standalone line is gone; this is the one place the
 // count and the actual items both live now.
 //
@@ -3614,7 +3616,7 @@ const AttentionEntryRow = ({ entry, indent }) => (
   </div>
 )
 
-// GoalRow (2026-08-04) - individual Daily Goals item, per Ian's direct
+// GoalRow (2026-08-04) - individual Daily Goals item, per the owner's direct
 // follow-up on the section restyle above: "have it match the style of the
 // other collapseabile sections and have brief summary that can be
 // explandable and have it clickable so that i can work on it in a new
@@ -3626,25 +3628,25 @@ const AttentionEntryRow = ({ entry, indent }) => (
 // Detail panel has gone through three shapes now. First pass used real
 // SubFields (Summary/Currently in/Context, each its own independently-
 // expandable sub-panel) matching ProjectRow's own multi-field detail -
-// per Ian's original ask: "maybe sub sections can be summary, an
+// per the owner's original ask: "maybe sub sections can be summary, an
 // explandable read out of what section it currently lives in and maybe
 // the previous context piece." Walked back to one flat concatenated
 // block after seeing it live: "the style of goals explandable still is
 // weird and different than the others... match the font and styling of
 // the text of the other expandables so its standard." Reinstated again
-// (2026-08-05), per Ian looking at the flat version live: "can we change
+// (2026-08-05), per the owner looking at the flat version live: "can we change
 // the font and styling so it matches other things? Summary, currently
 // in, etc. these should be expandable children." Reading both rounds of
 // feedback together: the actual complaint both times was never "don't
 // use SubFields" - it's that whatever rendered didn't visually match
 // ProjectRow's real SubFields. The flat-block version technically fixed
 // that by sidestepping SubFields entirely, but lost the per-field
-// expand/collapse Ian's original ask wanted. This version uses the
+// expand/collapse the owner's original ask wanted. This version uses the
 // EXACT SAME `SubField` component ProjectRow itself uses (not a
 // reimplementation, not a styled copy) - same font, same label styling,
 // same nested/collapsible mechanics - so there's no way for it to drift
 // from "the other expandables" again.
-// requires_code destination note (2026-08-04 follow-up), per Ian: "it
+// requires_code destination note (2026-08-04 follow-up), per the owner: "it
 // should specify if it should be pasted into a regular thread or code if
 // it requires code or plugins." requires_code comes from status_summary.py
 // (see load_daily_goal's own comment) - True when the goal's named project
@@ -3661,11 +3663,11 @@ const goalPrompt = (title, detail, requiresCode) =>
   `tracker's conventions.`
 
 // Bullet icon shrunk to 9px (2026-08-04), smaller than the 12px default
-// every other row icon in this file uses - per Ian, twice: "the mini goal
+// every other row icon in this file uses - per the owner, twice: "the mini goal
 // bullets are a nice touche but theyre too big" and then, still not small
 // enough after the first pass, "i like the bullet icons make them
 // smaller." Deliberately breaks from matching attentionKind's usual
-// icon size exactly, since Ian's calling these "bullets" (a lighter,
+// icon size exactly, since the owner's calling these "bullets" (a lighter,
 // decorative marker) rather than a semantic action icon like IconAsk/
 // IconBlocked.
 const GoalRow = ({ goal, completed }) => {
@@ -3777,7 +3779,7 @@ const NeedsAttention = ({ needsAttention, needsIanCount }) => {
 
 export const render = (state) => {
   // Re-sync open trays right after every Übersicht re-render (2026-08-10,
-  // real bug fix, round 5) - per Ian's screenshot, caught mid-glitch: the
+  // real bug fix, round 5) - per the owner's screenshot, caught mid-glitch: the
   // open Reports Tray box briefly ballooned to nearly full desktop
   // height, with "LAST TOUCHED: WELLBEING-CHECK (0M AGO)" visible in the
   // same frame - a fresh state refresh landing right as it happened.
@@ -3791,7 +3793,7 @@ export const render = (state) => {
   // render has already applied - queuing the sync here closes that gap on
   // every refresh, not just every 3 seconds.
   //
-  // syncActiveHex runs FIRST (2026-08-11) - per Ian's screenshot: Reports
+  // syncActiveHex runs FIRST (2026-08-11) - per the owner's screenshot: Reports
   // Tray blanked out entirely after a click. A fresh render's own DOM
   // output never carries the imperatively-added is-active class (see
   // activeHexKey's own comment) - re-applying it before
@@ -3864,21 +3866,21 @@ export const render = (state) => {
       <div className={cardInner}>
       <div className={`${title} ${clickableCursor}`} onClick={toggleExpanded}>Commandspace</div>
 
-      {/* 2026-07-31, per Ian: mini mode was inconsistent - Done showed "0"
+      {/* 2026-07-31, per the owner: mini mode was inconsistent - Done showed "0"
           unconditionally while Dormant/Needs Attention only appeared above 0,
           which read as a bug ("completed stays as 0 but dormant disappeared").
-          Ian's call: 0 means no show, across the board, in mini mode - big
+          The owner's call: 0 means no show, across the board, in mini mode - big
           mode is the opposite (every subsection always shows its header, see
           Section above), so the two modes intentionally behave differently. */}
       <div className={tinyRow}>
-        {/* 2026-07-31, per Ian: "break icon should be in mini mode and have
+        {/* 2026-07-31, per the owner: "break icon should be in mini mode and have
             a similar color change correspondence where it starts green if
             closer to fresh start and changes color closer to necessary
             break." Same healthHueColor helper the big-mode gauge's own fill
             uses, applied via inline style (beats tinyStat's own `& strong`
             amber rule on specificity) so both places always agree.
             "away" branch added (2026-08-02) - swaps to IconSleep + "zzz"
-            instead of the heartbeat + countdown while Ian's away, same
+            instead of the heartbeat + countdown while the owner's away, same
             condition the big-mode gauge below uses. */}
         {personal_health && (
           <span className={tinyStat}>
@@ -3908,7 +3910,7 @@ export const render = (state) => {
         {totals.backlog > 0 && (
           <span className={tinyStat}><IconBacklog /> <strong>{totals.backlog}</strong></span>
         )}
-        {/* 2026-07-31, per Ian: tiny mode's Done pill should show "done in the
+        {/* 2026-07-31, per the owner: tiny mode's Done pill should show "done in the
             last 2 weeks," not the plain lifetime total - a live snapshot of
             "done right now" barely moves, "done recently" is a real momentum
             signal. Big mode's Done section header shows both (see Section
@@ -3938,7 +3940,7 @@ export const render = (state) => {
         <div className={expandInner}>
           {hasResets && (
             <div className={resetsSection}>
-              {/* onClick locked to overdue-only (2026-08-02), per Ian:
+              {/* onClick locked to overdue-only (2026-08-02), per the owner:
                   "clicking the timer should only reset it to 60 if its
                   zero, it needs to stay in place after counting down."
                   Previously always-clickable, which is what made the
@@ -3948,7 +3950,7 @@ export const render = (state) => {
                   truthy, so passing undefined while still counting down
                   also makes it visually non-interactive, not just
                   functionally inert. */}
-              {/* "away" branch added (2026-08-02), per Ian: "if there is
+              {/* "away" branch added (2026-08-02), per the owner: "if there is
                   idle or long periods where I am away, can we change the
                   icon to a little z's or sleeping... I don't want it to be
                   in the 'needs a break' when I just am inactive or away.
@@ -3959,12 +3961,12 @@ export const render = (state) => {
                   (overdue always false while away, forced server-side), and
                   auto-resets last_break_at the moment activity resumes -
                   this just swaps the icon/color to match that state. */}
-              {/* staleText shortened + moved inline (2026-08-04), per Ian:
+              {/* staleText shortened + moved inline (2026-08-04), per the owner:
                   the old "overdue — take a break (click to reset)" wrapped
                   to two lines inside resetBarCol's fixed 150px width, making
                   this gauge visibly taller than SESSION underneath it -
                   uneven spacing between them. First pass just shortened the
-                  text; Ian's follow-up asked to keep every gauge's spacing
+                  text; the owner's follow-up asked to keep every gauge's spacing
                   identical regardless of state, so ResetGauge now renders
                   this inline next to valueText instead of on its own line
                   (see ResetGauge's own comment) - "reset" here reads as
@@ -3979,7 +3981,7 @@ export const render = (state) => {
                   stale={personal_health.overdue}
                   staleText="reset"
                   onClick={personal_health.overdue ? resetHealthTimer : undefined}
-                  // Color fix (2026-08-04), per Ian: "the lifelines here for
+                  // Color fix (2026-08-04), per the owner: "the lifelines here for
                   // break in mini mode and last break need to align." This
                   // icon used to render at its default static amber
                   // regardless of urgency, while the mini-mode pill right

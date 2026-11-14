@@ -16,7 +16,7 @@
 - `Tray`'s own definition (shell: box/handle/label/count/list-grid) is NOT modified by this plan — the Reports Tray is a third caller of the existing, unchanged component. The hide-when-empty behavior for this specific tray is handled entirely at its own call site (see Task 2), not by changing `Tray` itself.
 - `report_summary.py`'s own loading/parsing logic (`load_latest_log`, `load_latest_usage_report`, `load_persona_nuggets`, `find_latest_dated_file`, `parse_report_sections`) is NOT modified — only imported and called from a new location. The file itself is not deleted.
 - `claudespace-status/index.jsx` already has its own `formatHoursAgo` (24h cutover to days). The ported version keeps its own distinct 48h cutover under the name `formatReportHoursAgo` — do not rename either to unify them, and do not let the new one shadow/collide with the existing one.
-- Run `bash scripts/verify_widget.sh` (from the repo root; prefer `VERIFY_JSX_PARSER_DIR=/Users/ianerickson/Desktop/Projects/recast` if available, for a real JSX parse rather than the brace/backtick fallback) after every task and confirm `== all checks passed ==`.
+- Run `bash scripts/verify_widget.sh` (from the repo root; prefer `VERIFY_JSX_PARSER_DIR=~/Desktop/Projects/recast` if available, for a real JSX parse rather than the brace/backtick fallback) after every task and confirm `== all checks passed ==`.
 - This repo has no JS test runner and no Python test framework (no `package.json`, no `pytest`) — plain `assert`-based scripts for Python, static checks + manual self-review for JSX (no live-GUI access in any implementation subagent's environment — flag the live-widget check as not performed rather than fake it, same as the Script Tray plan).
 
 ---

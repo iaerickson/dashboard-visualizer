@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 lifecycle_resort.py — Mechanically promotes quiet 🟢 Active projects to
-🔵 Backlog in ClaudeSpace's INDEX.md, per Ian's confirmed threshold
+🔵 Backlog in ClaudeSpace's INDEX.md, per the owner's confirmed threshold
 (2026-08-04): "if an idea hasn't been touched or worked on in... 3 days
 maybe we move it to the backlog." Part of the lifecycle re-design first
 proposed 2026-07-31 (see ClaudeSpace/NEEDS-IAN.md's dashboard-visualizer
@@ -103,7 +103,7 @@ def apply_promotions(claude_space: Path, promotions: list[dict]) -> None:
         index_text = index_text.replace(promo["old_line"], promo["new_line"], 1)
         note = (
             f"\n- {today} — Auto-moved 🟢 Active → 🔵 Backlog by `lifecycle_resort.py` "
-            f"— no README activity for {promo['age_days']} days (3-day threshold, per Ian 2026-08-04).\n"
+            f"— no README activity for {promo['age_days']} days (3-day threshold, per the owner 2026-08-04).\n"
         )
         readme_text = promo["readme_path"].read_text(errors="ignore")
         if "## Notes" in readme_text:

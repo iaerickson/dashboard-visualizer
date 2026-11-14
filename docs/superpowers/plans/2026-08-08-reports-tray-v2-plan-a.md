@@ -16,7 +16,7 @@
 - No literal backtick characters inside `/* ... */` comments living inside a `css\`...\`` template literal.
 - Config writes follow this codebase's existing convention exactly: `config_path.write_text(json.dumps(data, indent=2))` — no atomic temp-file-plus-rename dance, that's not this codebase's pattern (see `load_session_reset`/`load_personal_health` in `status_summary.py`).
 - Dated-file sort order is always by FILENAME (the stem, e.g. `"2026-08-06"`), never by file mtime — same reasoning `find_latest_dated_file`'s own existing docstring already gives (a rollup move can bump mtime without changing what day the entry is about).
-- This repo has no JS test runner and no Python test framework (no `package.json`, no `pytest`) — plain `assert`-based scripts for Python, static checks (`verify_widget.sh`, prefer `VERIFY_JSX_PARSER_DIR=/Users/ianerickson/Desktop/Projects/recast` for a real JSX parse) + human self-review for JSX (no live-GUI access in any implementation subagent's environment — flag the live-widget check as not performed rather than fake it).
+- This repo has no JS test runner and no Python test framework (no `package.json`, no `pytest`) — plain `assert`-based scripts for Python, static checks (`verify_widget.sh`, prefer `VERIFY_JSX_PARSER_DIR=~/Desktop/Projects/recast` for a real JSX parse) + human self-review for JSX (no live-GUI access in any implementation subagent's environment — flag the live-widget check as not performed rather than fake it).
 
 ---
 
@@ -154,7 +154,7 @@ def is_unread(viewed_entry: dict, instance_id: str | None = None, mtime: float |
 #!/usr/bin/env python3
 """
 mark_report_viewed.py — Reports Tray v2 (2026-08-08). Updates one source's
-entry in config/reports_viewed.json when Ian clicks open a hex in the
+entry in config/reports_viewed.json when the owner clicks open a hex in the
 Reports Tray. Called by the widget itself via Übersicht's `run()` shell-out
 (same mechanism claudespace-status/index.jsx's own copyPrompt already uses
 for copy-to-clipboard - this isn't a new interaction pattern for this
@@ -1103,8 +1103,8 @@ Add immediately after `renderReportOverlayBody`:
 // mark). Absolute paths, same convention CLAUDE_SPACE_FOLDER and this
 // widget's own `command` export already use throughout this file - this
 // is a personal, single-user widget, not meant to be portable.
-const REPORTS_VIEWED_CONFIG_PATH = "/Users/ianerickson/Desktop/Projects/dashboard-visualizer/config/reports_viewed.json"
-const MARK_REPORT_VIEWED_SCRIPT_PATH = "/Users/ianerickson/Desktop/Projects/dashboard-visualizer/scripts/mark_report_viewed.py"
+const REPORTS_VIEWED_CONFIG_PATH = "~/Desktop/Projects/dashboard-visualizer/config/reports_viewed.json"
+const MARK_REPORT_VIEWED_SCRIPT_PATH = "~/Desktop/Projects/dashboard-visualizer/scripts/mark_report_viewed.py"
 
 const markReportViewed = (item) => {
   if (item.viewed) return
